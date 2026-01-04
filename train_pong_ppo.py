@@ -1,6 +1,7 @@
 import os
 from typing import Callable, Optional
 
+import pygame
 import gymnasium as gym
 import numpy as np
 from stable_baselines3 import PPO
