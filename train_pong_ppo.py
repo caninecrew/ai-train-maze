@@ -398,6 +398,9 @@ def main():
                 no_improve_cycles = 0
             else:
                 no_improve_cycles += 1
+            if all_grid_frames:
+                annotated = _add_overlay(all_grid_frames[-1], f"Next base model: {best_id}")
+                all_grid_frames.append(annotated)
         else:
             print("No scores recorded; cannot propagate best model.")
 
