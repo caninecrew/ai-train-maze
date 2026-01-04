@@ -1,0 +1,35 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Training outputs / logs
+logs/
+runs/
+tensorboard/
+*.tfevents.*
+
+# Saved models (can be large)
+*.zip
+*.pth
+*.pt
+
+# Videos (large)
+videos/
+*.mp4
+
+# Local data
+*.rom
+*.bin
+*.gz
+*.tar
+*.7z
