@@ -174,6 +174,26 @@ def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
     return grid_frames
 
 
+def _safe_write_video(frames: List[np.ndarray], path: Path, fps: int) -> bool:
+    """
+    Write frames to mp4 using ffmpeg if available. Returns True on success.
+    """
+    if not frames:
+        print("No frames to write; skipping video.")
+        return False
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        import imageio.v2 as iio  # use v2 API for stable ffmpeg handling
+
+        with iio.get_writer(path, format="FFMPEG", fps=fps) as writer:
+            for frame in frames:
+                writer.append_data(frame)
+        return True
+    except Exception as exc:
+        print(f"Video write failed for {path.name}: {exc}")
+        return False
+
+
 @dataclass
 class TrainConfig:
     train_timesteps: int = 300_000
@@ -605,17 +625,9 @@ def main():
             break
 
         if all_grid_frames:
-            combined_video_path = os.path.join(cfg.video_dir, f"ppo_pong_combined_{timestamp}.mp4")
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, dir=Path(combined_video_path).parent) as tmp:
-                    imageio.mimsave(tmp.name, all_grid_frames, fps=cfg.target_fps)
-                    tmp.flush()
-                os.replace(tmp.name, combined_video_path)
+            combined_video_path = Path(cfg.video_dir) / f"ppo_pong_combined_{timestamp}.mp4"
+            if _safe_write_video(all_grid_frames, combined_video_path, cfg.target_fps):
                 print(f"Saved combined video with all models in a grid: {combined_video_path} (frames: {len(all_grid_frames)})")
-            except ValueError:
-                print("Video frames were empty or invalid; skipping video write.")
-            except Exception as exc:  # pragma: no cover - defensive
-                print(f"Video write failed: {exc}")
         else:
             print("No frames captured; combined video not written.")
 
@@ -624,14 +636,8 @@ def main():
                 if not frames:
                     continue
                 indiv_path = Path(cfg.video_dir) / f"{model_id}_{timestamp}.mp4"
-                try:
-                    with tempfile.NamedTemporaryFile(delete=False, dir=indiv_path.parent) as tmp:
-                        imageio.mimsave(tmp.name, frames, fps=cfg.target_fps)
-                        tmp.flush()
-                    os.replace(tmp.name, indiv_path)
+                if _safe_write_video(frames, indiv_path, cfg.target_fps):
                     print(f"[{model_id}] Saved individual video: {indiv_path}")
-                except Exception as exc:  # pragma: no cover - defensive
-                    print(f"[{model_id}] Failed to write individual video: {exc}")
 
 if __name__ == "__main__":
     main()
