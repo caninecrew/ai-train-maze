@@ -37,6 +37,29 @@ def _tensorboard_available() -> bool:
         return False
 
 
+def _parse_resolution(res_str: str) -> Tuple[int, int]:
+    if "x" not in res_str:
+        raise ValueError("Resolution must be in <width>x<height> format.")
+    w_str, h_str = res_str.lower().split("x", 1)
+    return int(w_str), int(h_str)
+
+
+def _resolve_affinity_list(cpu_affinity: Optional[str], n_envs: int) -> Optional[List[int]]:
+    if not cpu_affinity:
+        return None
+    if cpu_affinity.lower() == "auto":
+        try:
+            cpus = list(range(os.cpu_count() or 1))
+            stride = max(1, len(cpus) // max(1, n_envs))
+            return cpus[::stride] or cpus
+        except Exception:
+            return None
+    try:
+        return [int(x) for x in cpu_affinity.split(",") if x.strip()]
+    except Exception:
+        return None
+
+
 from pong import (
     PongEnv,
     simple_tracking_policy,
@@ -112,6 +135,7 @@ def record_video_segment(
     ball_color: Tuple[int, int, int],
     steps: int = 400,
     overlay_text: str = "",
+    resolution: Tuple[int, int] = (320, 192),
 ) -> Tuple[List[np.ndarray], bool]:
     """
     Roll out a short episode with the trained model and return frames plus whether the ball was successfully returned.
@@ -119,7 +143,7 @@ def record_video_segment(
     env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode="rgb_array", ball_color=ball_color)
     obs, _ = env.reset()
     frames: List[np.ndarray] = []
-    target_size = (320, 192)  # divisible by 16 to keep codecs happy
+    target_size = resolution  # divisible by 16 to keep codecs happy
     ponged = False
 
     frame = env.render()
@@ -186,7 +210,7 @@ def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
     return grid_frames
 
 
-def _safe_write_video(frames: List[np.ndarray], path: Path, fps: int) -> bool:
+def _safe_write_video(frames: List[np.ndarray], path: Path, fps: int, final_overlay: str = "") -> bool:
     """
     Write frames to mp4 using ffmpeg if available. Returns True on success.
     """
@@ -199,7 +223,9 @@ def _safe_write_video(frames: List[np.ndarray], path: Path, fps: int) -> bool:
 
         writer = cast(Any, iio.get_writer(path, format="ffmpeg", fps=fps))  # type: ignore[arg-type]
         with writer:
-            for frame in frames:
+            for idx, frame in enumerate(frames):
+                if final_overlay and idx == len(frames) - 1:
+                    frame = _add_overlay(frame, final_overlay)
                 writer.append_data(frame)
         return True
     except Exception as exc:
@@ -229,17 +255,28 @@ class TrainConfig:
     early_stop_patience: int = 3
     improvement_threshold: float = 0.05
     eval_episodes: int = 3
+    eval_video_steps: int = 0
+    long_eval_video_steps: int = 0
     top_k_checkpoints: int = 3
     no_checkpoint: bool = False
     individual_videos: bool = False
-    cpu_affinity: Optional[str] = None  # e.g. "0,1,2"
+    cpu_affinity: Optional[str] = None  # e.g. "0,1,2" or "auto"
+    num_threads: Optional[int] = None
     video_dir: str = "videos"
     model_dir: str = "models"
     log_dir: str = "logs"
     metrics_csv: str = "logs/metrics.csv"
+    metrics_deltas: bool = True
+    stream_tensorboard: bool = False
+    status: bool = False
+    resume_from: Optional[str] = None
     config_path: Optional[str] = None
     profile: Optional[str] = None
     dry_run: bool = False
+    video_resolution: str = "320x192"
+    eval_overlay: bool = True
+    eval_deterministic: bool = False
+    worker_watchdog: bool = True
 
     @property
     def max_video_frames(self) -> int:
@@ -262,7 +299,24 @@ def _load_config_file(path: Optional[str]) -> Dict[str, Any]:
             data = json.load(fh)
     if not isinstance(data, dict):
         raise ValueError("Config file must contain a mapping of keys to values.")
-    return data
+    defaults = data.get("defaults", data)
+    profiles = data.get("profiles", {})
+    if not isinstance(defaults, dict):
+        raise ValueError("Config defaults must be a mapping.")
+    if profiles and not isinstance(profiles, dict):
+        raise ValueError("Config profiles must be a mapping of profile -> overrides.")
+    return {"defaults": defaults, "profiles": profiles}
+
+
+def _merge_profile_config(file_cfg: Dict[str, Any], profile: Optional[str]) -> Dict[str, Any]:
+    defaults = file_cfg.get("defaults", {})
+    profiles = file_cfg.get("profiles", {})
+    merged = dict(defaults)
+    if profile and isinstance(profiles, dict) and profile in profiles:
+        overrides = profiles[profile]
+        if isinstance(overrides, dict):
+            merged.update(overrides)
+    return merged
 
 
 def _apply_profile(cfg: TrainConfig) -> None:
@@ -327,44 +381,50 @@ def _progress_bar_ready(suppress_log: bool = False) -> bool:
 def parse_args() -> TrainConfig:
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument("--config", type=str, help="Path to YAML/JSON config to merge.")
+    base_parser.add_argument("--profile", choices=["quick", "single", "gpu"], help="Preset overrides for common workflows.")
     known, remaining = base_parser.parse_known_args()
     file_cfg = _load_config_file(known.config)
+    defaults_from_file = _merge_profile_config(file_cfg, known.profile)
 
     parser = argparse.ArgumentParser(description="Train PPO agents for custom Pong.", parents=[base_parser])
-    parser.add_argument("--profile", choices=["quick", "single", "gpu"], help="Preset overrides for common workflows.")
-    parser.add_argument("--train-timesteps", type=int, default=file_cfg.get("train_timesteps", TrainConfig.train_timesteps))
-    parser.add_argument("--n-steps", type=int, default=file_cfg.get("n_steps", TrainConfig.n_steps))
-    parser.add_argument("--batch-size", type=int, default=file_cfg.get("batch_size", TrainConfig.batch_size))
-    parser.add_argument("--n-epochs", type=int, default=file_cfg.get("n_epochs", TrainConfig.n_epochs))
-    parser.add_argument("--gamma", type=float, default=file_cfg.get("gamma", TrainConfig.gamma))
-    parser.add_argument("--learning-rate", type=float, default=file_cfg.get("learning_rate", TrainConfig.learning_rate))
-    parser.add_argument("--device", type=str, default=file_cfg.get("device", TrainConfig.device))
-    parser.add_argument("--target-fps", type=int, default=file_cfg.get("target_fps", TrainConfig.target_fps))
-    parser.add_argument("--max-video-seconds", type=int, default=file_cfg.get("max_video_seconds", TrainConfig.max_video_seconds))
-    parser.add_argument(
-        "--video-steps",
-        type=int,
-        default=file_cfg.get("video_steps", TrainConfig.video_steps),
-        help="Frames captured per clip; e.g., 1800 ≈ 60s at 30 fps, 3600 ≈ 2min.",
-    )
-    parser.add_argument("--max-cycles", type=int, default=file_cfg.get("max_cycles", TrainConfig.max_cycles))
-    parser.add_argument("--checkpoint-interval", type=int, default=file_cfg.get("checkpoint_interval", TrainConfig.checkpoint_interval))
-    parser.add_argument("--iterations-per-set", type=int, default=file_cfg.get("iterations_per_set", TrainConfig.iterations_per_set))
-    parser.add_argument("--n-envs", type=int, default=file_cfg.get("n_envs", TrainConfig.n_envs))
-    parser.add_argument("--seed", type=int, default=file_cfg.get("seed", TrainConfig.seed))
-    parser.add_argument("--base-seed", type=int, default=file_cfg.get("base_seed", TrainConfig.base_seed))
-    parser.add_argument("--deterministic", action="store_true", default=file_cfg.get("deterministic", TrainConfig.deterministic))
-    parser.add_argument("--early-stop-patience", type=int, default=file_cfg.get("early_stop_patience", TrainConfig.early_stop_patience))
-    parser.add_argument("--improvement-threshold", type=float, default=file_cfg.get("improvement_threshold", TrainConfig.improvement_threshold))
-    parser.add_argument("--eval-episodes", type=int, default=file_cfg.get("eval_episodes", TrainConfig.eval_episodes))
-    parser.add_argument("--top-k-checkpoints", type=int, default=file_cfg.get("top_k_checkpoints", TrainConfig.top_k_checkpoints))
-    parser.add_argument("--no-checkpoint", action="store_true", default=file_cfg.get("no_checkpoint", TrainConfig.no_checkpoint))
-    parser.add_argument("--individual-videos", action="store_true", default=file_cfg.get("individual_videos", TrainConfig.individual_videos))
-    parser.add_argument("--cpu-affinity", type=str, default=file_cfg.get("cpu_affinity", TrainConfig.cpu_affinity))
-    parser.add_argument("--video-dir", type=str, default=file_cfg.get("video_dir", TrainConfig.video_dir))
-    parser.add_argument("--model-dir", type=str, default=file_cfg.get("model_dir", TrainConfig.model_dir))
-    parser.add_argument("--log-dir", type=str, default=file_cfg.get("log_dir", TrainConfig.log_dir))
-    parser.add_argument("--metrics-csv", type=str, default=file_cfg.get("metrics_csv", TrainConfig.metrics_csv))
+    parser.add_argument("--status", action="store_true", default=defaults_from_file.get("status", False), help="Show current best status and exit.")
+    parser.add_argument("--train-timesteps", type=int, default=defaults_from_file.get("train_timesteps", TrainConfig.train_timesteps))
+    parser.add_argument("--n-steps", type=int, default=defaults_from_file.get("n_steps", TrainConfig.n_steps))
+    parser.add_argument("--batch-size", type=int, default=defaults_from_file.get("batch_size", TrainConfig.batch_size))
+    parser.add_argument("--n-epochs", type=int, default=defaults_from_file.get("n_epochs", TrainConfig.n_epochs))
+    parser.add_argument("--gamma", type=float, default=defaults_from_file.get("gamma", TrainConfig.gamma))
+    parser.add_argument("--learning-rate", type=float, default=defaults_from_file.get("learning_rate", TrainConfig.learning_rate))
+    parser.add_argument("--device", type=str, default=defaults_from_file.get("device", TrainConfig.device))
+    parser.add_argument("--target-fps", type=int, default=defaults_from_file.get("target_fps", TrainConfig.target_fps))
+    parser.add_argument("--max-video-seconds", type=int, default=defaults_from_file.get("max_video_seconds", TrainConfig.max_video_seconds))
+    parser.add_argument("--video-steps", type=int, default=defaults_from_file.get("video_steps", TrainConfig.video_steps), help="Frames captured per clip; e.g., 1800 ~= 60s at 30 fps, 3600 ~= 2min.")
+    parser.add_argument("--max-cycles", type=int, default=defaults_from_file.get("max_cycles", TrainConfig.max_cycles))
+    parser.add_argument("--checkpoint-interval", type=int, default=defaults_from_file.get("checkpoint_interval", TrainConfig.checkpoint_interval))
+    parser.add_argument("--iterations-per-set", type=int, default=defaults_from_file.get("iterations_per_set", TrainConfig.iterations_per_set))
+    parser.add_argument("--n-envs", type=int, default=defaults_from_file.get("n_envs", TrainConfig.n_envs))
+    parser.add_argument("--seed", type=int, default=defaults_from_file.get("seed", TrainConfig.seed))
+    parser.add_argument("--base-seed", type=int, default=defaults_from_file.get("base_seed", TrainConfig.base_seed))
+    parser.add_argument("--deterministic", action="store_true", default=defaults_from_file.get("deterministic", TrainConfig.deterministic))
+    parser.add_argument("--early-stop-patience", type=int, default=defaults_from_file.get("early_stop_patience", TrainConfig.early_stop_patience))
+    parser.add_argument("--improvement-threshold", type=float, default=defaults_from_file.get("improvement_threshold", TrainConfig.improvement_threshold))
+    parser.add_argument("--eval-episodes", type=int, default=defaults_from_file.get("eval_episodes", TrainConfig.eval_episodes))
+    parser.add_argument("--eval-video-steps", type=int, default=defaults_from_file.get("eval_video_steps", TrainConfig.eval_video_steps), help="Optional extra eval video steps.")
+    parser.add_argument("--long-eval-video-steps", type=int, default=defaults_from_file.get("long_eval_video_steps", TrainConfig.long_eval_video_steps), help="Capture a longer evaluation match separately.")
+    parser.add_argument("--top-k-checkpoints", type=int, default=defaults_from_file.get("top_k_checkpoints", TrainConfig.top_k_checkpoints))
+    parser.add_argument("--no-checkpoint", action="store_true", default=defaults_from_file.get("no_checkpoint", TrainConfig.no_checkpoint))
+    parser.add_argument("--individual-videos", action="store_true", default=defaults_from_file.get("individual_videos", TrainConfig.individual_videos))
+    parser.add_argument("--cpu-affinity", type=str, default=defaults_from_file.get("cpu_affinity", TrainConfig.cpu_affinity))
+    parser.add_argument("--num-threads", type=int, default=defaults_from_file.get("num_threads", TrainConfig.num_threads) or None, help="Override torch.num_threads.")
+    parser.add_argument("--video-dir", type=str, default=defaults_from_file.get("video_dir", TrainConfig.video_dir))
+    parser.add_argument("--model-dir", type=str, default=defaults_from_file.get("model_dir", TrainConfig.model_dir))
+    parser.add_argument("--log-dir", type=str, default=defaults_from_file.get("log_dir", TrainConfig.log_dir))
+    parser.add_argument("--metrics-csv", type=str, default=defaults_from_file.get("metrics_csv", TrainConfig.metrics_csv))
+    parser.add_argument("--metrics-deltas", action="store_true", default=defaults_from_file.get("metrics_deltas", TrainConfig.metrics_deltas))
+    parser.add_argument("--stream-tensorboard", action="store_true", default=defaults_from_file.get("stream_tensorboard", TrainConfig.stream_tensorboard))
+    parser.add_argument("--resume-from", type=str, default=defaults_from_file.get("resume_from", TrainConfig.resume_from), help="Checkpoint to resume from instead of *_latest.")
+    parser.add_argument("--video-resolution", type=str, default=defaults_from_file.get("video_resolution", TrainConfig.video_resolution))
+    parser.add_argument("--eval-deterministic", action="store_true", default=defaults_from_file.get("eval_deterministic", TrainConfig.eval_deterministic), help="Deterministic eval to reduce variance.")
+    parser.add_argument("--watchdog", dest="worker_watchdog", action="store_true", default=defaults_from_file.get("worker_watchdog", TrainConfig.worker_watchdog), help="Keep training when a worker fails.")
     parser.add_argument("--dry-run", action="store_true", help="Parse config, build envs, and exit without training.")
     args = parser.parse_args(remaining)
     cfg = TrainConfig(
@@ -388,23 +448,62 @@ def parse_args() -> TrainConfig:
         early_stop_patience=args.early_stop_patience,
         improvement_threshold=args.improvement_threshold,
         eval_episodes=args.eval_episodes,
+        eval_video_steps=args.eval_video_steps,
+        long_eval_video_steps=args.long_eval_video_steps,
         top_k_checkpoints=args.top_k_checkpoints,
         no_checkpoint=args.no_checkpoint,
         individual_videos=args.individual_videos,
         cpu_affinity=args.cpu_affinity,
+        num_threads=args.num_threads,
         video_dir=args.video_dir,
         model_dir=args.model_dir,
         log_dir=args.log_dir,
         metrics_csv=args.metrics_csv,
+        metrics_deltas=args.metrics_deltas,
+        stream_tensorboard=args.stream_tensorboard,
+        status=args.status,
+        resume_from=args.resume_from,
         config_path=known.config,
         profile=args.profile,
         dry_run=args.dry_run,
+        video_resolution=args.video_resolution,
+        eval_deterministic=args.eval_deterministic,
+        worker_watchdog=args.worker_watchdog,
     )
     _apply_profile(cfg)
+    if cfg.video_steps > cfg.max_video_frames:
+        print(
+            f"Warning: video_steps ({cfg.video_steps}) exceeds max frames from max_video_seconds*target_fps ({cfg.max_video_frames}). "
+            "Consider lowering --video-steps or raising --max-video-seconds/--target-fps."
+        )
     return cfg
 
 
-def evaluate_model(model: PPO, episodes: int) -> Dict[str, float]:
+def _print_status(cfg: TrainConfig) -> None:
+    metrics_path = Path(cfg.metrics_csv)
+    if not metrics_path.exists():
+        print(f"No metrics CSV found at {metrics_path}; run training first.")
+        return
+    import csv
+
+    best_row = None
+    with metrics_path.open("r", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            try:
+                reward = float(row.get("avg_reward", 0.0))
+            except Exception:
+                reward = float("-inf")
+            if best_row is None or reward > float(best_row.get("avg_reward", float("-inf"))):
+                best_row = row
+    if not best_row:
+        print("Metrics file is empty; no status to report.")
+        return
+    print("=== Current Status ===")
+    print(f"Best model id: {best_row.get('model_id')} | avg_reward={best_row.get('avg_reward')} | win_rate={best_row.get('win_rate')}")
+    print(f"Last recorded at cycle {best_row.get('cycle')} on {best_row.get('timestamp')}")
+
+def evaluate_model(model: PPO, episodes: int, deterministic: bool = True) -> Dict[str, float]:
     eval_env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None)
     rewards: List[float] = []
     returns: List[int] = []
@@ -421,7 +520,7 @@ def evaluate_model(model: PPO, episodes: int) -> Dict[str, float]:
         last_right = 0
         rally_steps = 0
         while not done and steps < eval_env.env.cfg.max_steps:
-            action, _ = model.predict(obs, deterministic=True)
+            action, _ = model.predict(obs, deterministic=deterministic)
             obs, rew, terminated, truncated, info = eval_env.step(action)
             rally_steps += 1
             left_score = info.get("left_score", left_score)
@@ -473,27 +572,33 @@ def _train_single(
     if cfg.deterministic:
         torch.manual_seed(seed)
         torch.use_deterministic_algorithms(True)
+    if cfg.num_threads:
+        torch.set_num_threads(cfg.num_threads)
 
-    if cfg.cpu_affinity:
+    affinity = _resolve_affinity_list(cfg.cpu_affinity, cfg.n_envs)
+    if affinity:
         try:
-            cpu_ids = [int(x) for x in cfg.cpu_affinity.split(",") if x.strip()]
             if hasattr(os, "sched_setaffinity"):
-                os.sched_setaffinity(0, cpu_ids)  # type: ignore[attr-defined]
+                os.sched_setaffinity(0, affinity)  # type: ignore[attr-defined]
         except Exception:
             pass
 
     def _make_env_with_retry(attempts: int = 3):
         last_err: Optional[Exception] = None
-        for _ in range(attempts):
+        for attempt in range(attempts):
             try:
-                return make_vec_env(
+                env = make_vec_env(
                     lambda: SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None),
                     n_envs=cfg.n_envs,
                     seed=seed,
                 )
+                # Prewarm to smooth jitters during initial rollout.
+                env.reset()
+                env.step(env.action_space.sample())
+                return env
             except Exception as exc:  # pragma: no cover - only on flaky init
                 last_err = exc
-                time.sleep(0.5)
+                time.sleep(0.5 * (attempt + 1))
         if last_err is not None:
             raise last_err
         raise RuntimeError("Failed to create environments but no error captured.")
@@ -506,9 +611,10 @@ def _train_single(
     if tb_log_dir is None:
         print(f"[{model_id}] TensorBoard not installed; disabling tensorboard logging.")
 
-    if os.path.exists(latest_path):
-        print(f"[{model_id}] Loading existing model from {latest_path} to continue training...")
-        model = PPO.load(latest_path, env=env, device=cfg.device)
+    resume_path = cfg.resume_from or (latest_path if os.path.exists(latest_path) else None)
+    if resume_path and os.path.exists(resume_path):
+        print(f"[{model_id}] Loading existing model from {resume_path} to continue training...")
+        model = PPO.load(resume_path, env=env, device=cfg.device)
         if tb_log_dir is None:
             model.tensorboard_log = None
     else:
@@ -541,7 +647,7 @@ def _train_single(
     model.save(latest_path)
     print(f"[{model_id}] Updated latest model: {latest_path}")
 
-    metrics = evaluate_model(model, cfg.eval_episodes)
+    metrics = evaluate_model(model, cfg.eval_episodes, deterministic=cfg.eval_deterministic or cfg.deterministic)
     print(f"[{model_id}] Avg reward over {cfg.eval_episodes} eval episodes: {metrics['avg_reward']:.3f}")
 
     segment, ponged = record_video_segment(
@@ -549,6 +655,7 @@ def _train_single(
         ball_color=color,
         steps=cfg.video_steps,
         overlay_text=f"{model_id} | r {metrics['avg_reward']:.2f} | win {metrics['win_rate']:.2f}",
+        resolution=_parse_resolution(cfg.video_resolution),
     )
     env.close()
     return model_id, metrics, segment, ponged, timestamp, latest_path, stamped_model_path
@@ -566,6 +673,9 @@ def main():
         f"iters_per_set={cfg.iterations_per_set}, max_cycles={cfg.max_cycles}, "
         f"video_steps={cfg.video_steps} (~{cfg.video_steps / cfg.target_fps:.1f}s @ {cfg.target_fps} fps)"
     )
+    if cfg.status:
+        _print_status(cfg)
+        return
     _progress_bar_ready()
 
     run_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -575,6 +685,14 @@ def main():
     log_file = os.path.join(cfg.log_dir, f"train_run_{run_timestamp}.jsonl")
     metrics_csv_path = Path(cfg.metrics_csv)
     metrics_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    tb_writer = None
+    if cfg.stream_tensorboard and _tensorboard_available():
+        try:
+            from torch.utils.tensorboard import SummaryWriter  # type: ignore
+
+            tb_writer = SummaryWriter(log_dir=os.path.join(cfg.log_dir, "cycle_metrics", run_timestamp))
+        except Exception:
+            tb_writer = None
 
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps({"event": "config", **asdict(cfg), "resolved_at": run_timestamp}) + "\n")
@@ -601,6 +719,10 @@ def main():
     no_improve_cycles = 0
     max_video_frames = cfg.max_video_frames
     top_checkpoints: List[Tuple[float, str]] = []
+    stop_reason = "max_cycles"
+    last_avg_by_model: Dict[str, float] = {}
+    cycle_reports: List[Dict[str, Any]] = []
+    best_checkpoint_path: Optional[str] = None
 
     cycle = 0
     while not failure_detected and cycle < cfg.max_cycles:
@@ -632,7 +754,13 @@ def main():
                 seed_by_future[future] = derived_seed
 
             for future in concurrent.futures.as_completed(futures):
-                model_id, metrics, segment, ponged, stamp, latest_path, stamped_path = future.result()
+                try:
+                    model_id, metrics, segment, ponged, stamp, latest_path, stamped_path = future.result()
+                except Exception as exc:
+                    if cfg.worker_watchdog:
+                        print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
+                        continue
+                    raise
                 scores.append((model_id, metrics["avg_reward"]))
                 metrics_list.append((model_id, metrics, latest_path))
                 if stamped_path:
@@ -659,6 +787,7 @@ def main():
             best_id, best_score_cycle = max(scores, key=lambda t: t[1])
             best_latest = os.path.join(cfg.model_dir, f"{best_id}_latest.zip")
             best_checkpoint_path = next((p for mid, _, p in metrics_list if mid == best_id), best_latest)
+            best_metrics = next((metrics for mid, metrics, _ in metrics_list if mid == best_id), {})
             for model_id in model_ids:
                 target_latest = os.path.join(cfg.model_dir, f"{model_id}_latest.zip")
                 if os.path.exists(best_latest) and best_latest != target_latest:
@@ -702,17 +831,23 @@ def main():
                         "avg_return_rate",
                         "avg_return_rate_ci",
                         "avg_rally_length",
+                        "delta_reward",
                         "timestamp",
                     ],
                 )
                 if not metrics_csv_exists:
                     writer.writeheader()
                 for model_id, metrics, _ in metrics_list:
+                    delta_reward = None
+                    if cfg.metrics_deltas and model_id in last_avg_by_model:
+                        delta_reward = metrics.get("avg_reward", 0.0) - last_avg_by_model[model_id]
+                    last_avg_by_model[model_id] = metrics.get("avg_reward", 0.0)
                     writer.writerow(
                         {
                             "cycle": cycle,
                             "model_id": model_id,
                             **metrics,
+                            "delta_reward": delta_reward if delta_reward is not None else "",
                             "timestamp": timestamp,
                         }
                     )
@@ -732,31 +867,71 @@ def main():
                 f"Best model this cycle: {best_id} (avg reward {best_score_cycle:.3f}); "
                 f"elapsed {elapsed:.1f}s; no_improve={no_improve_cycles}"
             )
+            cycle_reports.append(
+                {
+                    "cycle": cycle,
+                    "scores": scores,
+                    "best_id": best_id,
+                    "best_score": best_score_cycle,
+                    "timestamp": timestamp,
+                    "seeds": [base_seed + i + cycle for i in range(len(model_ids))],
+                }
+            )
         else:
             print("No scores recorded; cannot propagate best model.")
 
         if pong_flags and not any(pong_flags):
             print("Failure detected: no model returned the ball this cycle.")
             failure_detected = True
+            stop_reason = "no_pong"
         if no_improve_cycles >= cfg.early_stop_patience:
             print(f"No improvement for {no_improve_cycles} cycles; stopping early.")
+            stop_reason = "early_stop"
             break
 
         if all_grid_frames:
-            combined_video_path = Path(cfg.video_dir) / f"ppo_pong_combined_{timestamp}.mp4"
-            if _safe_write_video(all_grid_frames, combined_video_path, cfg.target_fps):
+            overlay_text = ""
+            if scores:
+                overlay_text = f"Cycle {cycle} best {best_id} | win {best_metrics.get('win_rate',0):.2f} | rally {best_metrics.get('avg_rally_length',0):.1f}"
+            combined_video_path = Path(cfg.video_dir) / f"ppo_pong_combined_{timestamp}_seed{base_seed}.mp4"
+            if _safe_write_video(all_grid_frames, combined_video_path, cfg.target_fps, final_overlay=overlay_text):
                 print(f"Saved combined video with all models in a grid: {combined_video_path} (frames: {len(all_grid_frames)})")
                 last_combined_video = str(combined_video_path)
         else:
             print("No frames captured; combined video not written.")
 
+        if cfg.long_eval_video_steps and best_checkpoint_path and os.path.exists(best_checkpoint_path):
+            try:
+                best_model = PPO.load(best_checkpoint_path, device=cfg.device)
+                frames, _ = record_video_segment(
+                    best_model,
+                    ball_color=(255, 255, 255),
+                    steps=cfg.long_eval_video_steps,
+                    overlay_text=f"{best_id} long eval",
+                    resolution=_parse_resolution(cfg.video_resolution),
+                )
+                if frames:
+                    eval_path = Path(cfg.video_dir) / f"{best_id}_eval_{timestamp}_seed{base_seed}.mp4"
+                    if _safe_write_video(frames, eval_path, cfg.target_fps, final_overlay="Long eval clip"):
+                        print(f"[{best_id}] Saved extended eval video: {eval_path}")
+            except Exception as exc:  # pragma: no cover - non-critical
+                print(f"Could not record extended eval video: {exc}")
+
         if cfg.individual_videos and segments_by_model:
             for model_id, frames in segments_by_model.items():
                 if not frames:
                     continue
-                indiv_path = Path(cfg.video_dir) / f"{model_id}_{timestamp}.mp4"
+                indiv_path = Path(cfg.video_dir) / f"{model_id}_{timestamp}_seed{base_seed}.mp4"
                 if _safe_write_video(frames, indiv_path, cfg.target_fps):
                     print(f"[{model_id}] Saved individual video: {indiv_path}")
+
+        if tb_writer:
+            for model_id, metrics, _ in metrics_list:
+                tb_writer.add_scalar(f"{model_id}/avg_reward", metrics.get("avg_reward", 0.0), cycle)
+                tb_writer.add_scalar(f"{model_id}/win_rate", metrics.get("win_rate", 0.0), cycle)
+
+    if tb_writer:
+        tb_writer.close()
 
     summary = {
         "event": "summary",
@@ -764,13 +939,33 @@ def main():
         "best_score": best_overall_score,
         "metrics_csv": cfg.metrics_csv,
         "video_dir": cfg.video_dir,
+        "model_dir": cfg.model_dir,
         "last_combined_video": last_combined_video,
         "run_timestamp": run_timestamp,
+        "stop_reason": stop_reason,
+        "cycles": cycle_reports,
     }
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(summary) + "\n")
+    report_json = Path(cfg.log_dir) / f"run_report_{run_timestamp}.json"
+    report_json.write_text(json.dumps({"config": asdict(cfg), "summary": summary}, indent=2))
+    report_html = Path(cfg.log_dir) / f"run_report_{run_timestamp}.html"
+    report_html.write_text(
+        f"<html><body><h1>Pong PPO Run {run_timestamp}</h1>"
+        f"<p>Best model: {best_overall_id or 'n/a'} (avg reward {best_overall_score:.3f})</p>"
+        f"<p>Stop reason: {stop_reason}</p>"
+        f"<p>Metrics CSV: {cfg.metrics_csv}</p>"
+        f"<p>Last combined video: {last_combined_video or 'n/a'}</p>"
+        f"<h2>Cycles</h2>"
+        + "".join(
+            f"<div><strong>Cycle {c['cycle']}</strong>: best {c['best_id']} @ {c['best_score']:.3f} (ts {c['timestamp']})</div>"
+            for c in cycle_reports
+        )
+        + "</body></html>"
+    )
     print("\n=== Run Summary ===")
     print(f"Best model: {best_overall_id or 'n/a'} (avg reward {best_overall_score:.3f})")
+    print(f"Stop reason: {stop_reason}")
     print(f"Metrics CSV: {cfg.metrics_csv}")
     if last_combined_video:
         print(f"Last combined video: {last_combined_video}")

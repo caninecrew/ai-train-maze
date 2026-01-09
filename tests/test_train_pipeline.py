@@ -14,6 +14,7 @@ from train_pong_ppo import (
     parse_args,
     TrainConfig,
     _train_single,
+    _progress_bar_ready,
 )
 from pong import simple_tracking_policy
 
@@ -56,6 +57,44 @@ def test_parse_args_reads_config(tmp_path, monkeypatch):
     assert cfg.n_steps == 7  # CLI override
     assert cfg.iterations_per_set == 1
     assert cfg.max_cycles == 1
+
+
+def test_parse_args_profile_defaults(tmp_path, monkeypatch):
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text(
+        json.dumps(
+            {
+                "defaults": {"n_steps": 2, "iterations_per_set": 1, "video_steps": 10},
+                "profiles": {"gpu": {"n_envs": 12}},
+            }
+        )
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["train_pong_ppo.py", "--config", str(cfg_file), "--profile", "gpu"],
+    )
+    cfg = parse_args()
+    assert cfg.n_steps == 2
+    assert cfg.n_envs == 12
+    assert cfg.video_steps == 10
+
+
+def test_dry_run_status_and_warning(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["train_pong_ppo.py", "--video-steps", "2000", "--max-video-seconds", "1"])
+    cfg = parse_args()
+    captured = capsys.readouterr().out
+    assert "Warning" in captured
+    assert cfg.status is False
+
+
+def test_progress_bar_suppression(monkeypatch, capsys):
+    from train_pong_ppo import _progress_bar_checked
+    monkeypatch.setattr("train_pong_ppo._progress_bar_checked", False)
+    monkeypatch.setattr("train_pong_ppo._progress_bar_available", False)
+    monkeypatch.setattr("train_pong_ppo.sys", sys)
+    out = _progress_bar_ready(suppress_log=True)
+    assert out is False
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.slow

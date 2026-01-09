@@ -13,7 +13,7 @@ from train_pong_ppo import SB3PongEnv, evaluate_model
 def evaluate(model_path: str, episodes: int, render: bool) -> None:
     env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode="human" if render else None)
     model = PPO.load(model_path, env=env)
-    metrics = evaluate_model(model, episodes)
+    metrics = evaluate_model(model, episodes, deterministic=True)
     env.close()
 
     print(f"\nResults over {episodes} episodes")
@@ -37,6 +37,8 @@ def main():
     parser.add_argument("--device", type=str, default="auto", help="Device to load the model on.")
     parser.add_argument("--output-csv", type=str, default=None, help="Optional CSV to append metrics to.")
     parser.add_argument("--deterministic", action="store_true", help="Toggle deterministic torch ops where possible.")
+    parser.add_argument("--compare", nargs="*", default=None, help="Compare multiple checkpoints head-to-head.")
+    parser.add_argument("--plot-path", type=str, default=None, help="Optional bar plot output when comparing.")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -51,14 +53,69 @@ def main():
         print(f"Model not found at {args.model_path}. Exiting cleanly.")
         return
 
-    try:
-        evaluate(args.model_path, args.episodes, args.render)
-    except FileNotFoundError:
-        print(f"Could not load model from {args.model_path}")
-        return
+    def _run_single(path: str):
+        try:
+            env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode="human" if args.render else None)
+            model = PPO.load(path, env=env, device=args.device)
+            metrics = evaluate_model(model, args.episodes, deterministic=args.deterministic)
+            env.close()
+            print(f"\nResults over {args.episodes} episodes for {path}")
+            print(f"- Average reward: {metrics['avg_reward']:.3f} +/- {metrics['avg_reward_ci']:.3f}")
+            print(f"- Win rate: {metrics['win_rate']:.2f}")
+            print(f"- Average rally length: {metrics['avg_rally_length']:.2f}")
+            print(f"- Average ball returns: {metrics['avg_return_rate']:.2f} +/- {metrics['avg_return_rate_ci']:.3f}")
+        except FileNotFoundError:
+            print(f"Could not load model from {path}")
+            return
+
+    if args.compare:
+        model_paths = args.compare
+        results = []
+        for path in model_paths:
+            if not Path(path).exists():
+                print(f"Skipping missing model {path}")
+                continue
+            env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None)
+            model = PPO.load(path, env=env, device=args.device)
+            metrics = evaluate_model(model, args.episodes, deterministic=args.deterministic)
+            results.append((path, metrics))
+            env.close()
+        print("\n=== Comparison ===")
+        for path, metrics in results:
+            print(f"{Path(path).name}: avg_reward={metrics['avg_reward']:.3f} win={metrics['win_rate']:.2f}")
+        if len(results) >= 2:
+            print("\nHead-to-head (left vs right):")
+            for i in range(len(results)):
+                for j in range(i + 1, len(results)):
+                    left_path, _ = results[i]
+                    right_path, _ = results[j]
+                    left_model = PPO.load(left_path, device=args.device)
+                    right_model = PPO.load(right_path, device=args.device)
+                    def _opp(obs, is_left, m=right_model):
+                        act, _ = m.predict(obs, deterministic=args.deterministic)
+                        return int(act)
+                    env = SB3PongEnv(opponent_policy=_opp, render_mode=None)
+                    metrics = evaluate_model(PPO.load(left_path, env=env, device=args.device), args.episodes, deterministic=args.deterministic)
+                    env.close()
+                    print(f"{Path(left_path).name} vs {Path(right_path).name}: win={metrics['win_rate']:.2f} reward={metrics['avg_reward']:.3f}")
+        if args.plot_path and results:
+            try:
+                import matplotlib.pyplot as plt  # type: ignore
+                labels = [Path(p).name for p, _ in results]
+                rewards = [m["avg_reward"] for _, m in results]
+                plt.bar(labels, rewards)
+                plt.xticks(rotation=45, ha="right")
+                plt.ylabel("Average Reward")
+                plt.tight_layout()
+                plt.savefig(args.plot_path)
+                print(f"Saved comparison plot to {args.plot_path}")
+            except Exception as exc:  # pragma: no cover - optional dep
+                print(f"Could not write plot: {exc}")
+    else:
+        _run_single(args.model_path)
 
     if args.output_csv:
-        metrics = evaluate_model(PPO.load(args.model_path, device=args.device), args.episodes)
+        metrics = evaluate_model(PPO.load(args.model_path, device=args.device), args.episodes, deterministic=args.deterministic)
         csv_path = Path(args.output_csv)
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         import csv
