@@ -15,7 +15,7 @@ from pong import simple_tracking_policy
 
 
 ROOT = Path.cwd()
-_HEATMAP_CACHE: Optional[List[List[int]]] = None
+_HEATMAP_CACHE: Optional[dict] = None
 _HEATMAP_TS = 0.0
 
 
@@ -40,28 +40,51 @@ def _read_metrics(metrics_csv: Path) -> dict:
     return best or {}
 
 
-def _heatmap_from_model(model_path: Path, steps: int = 1500, bins: int = 40) -> List[List[int]]:
+def _heatmap_from_model(model_path: Path, steps: int = 1500, bins: int = 40) -> dict:
     global _HEATMAP_CACHE, _HEATMAP_TS
     now = time.time()
     if _HEATMAP_CACHE is not None and (now - _HEATMAP_TS) < 10:
         return _HEATMAP_CACHE
     if not model_path.exists():
-        return []
+        return {}
     env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None)
     try:
         model = PPO.load(str(model_path), env=env, device="cpu")
         obs, _ = env.reset()
-        heat = np.zeros((bins, bins), dtype=np.int32)
+        heat_ball = np.zeros((bins, bins), dtype=np.int32)
+        heat_left = np.zeros((bins, bins), dtype=np.int32)
+        heat_right = np.zeros((bins, bins), dtype=np.int32)
+        heat_hits = np.zeros((bins, bins), dtype=np.int32)
+        heat_scores = np.zeros((bins, bins), dtype=np.int32)
+        last_left = 0
+        last_right = 0
         for _ in range(steps):
             action, _ = model.predict(obs, deterministic=True)
-            obs, _, terminated, truncated, _ = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
             bx, by = obs[0], obs[1]
+            ly, ry = obs[4], obs[5]
             x = min(bins - 1, max(0, int(bx * bins)))
             y = min(bins - 1, max(0, int(by * bins)))
-            heat[y, x] += 1
+            heat_ball[y, x] += 1
+            ly_idx = min(bins - 1, max(0, int(ly * bins)))
+            ry_idx = min(bins - 1, max(0, int(ry * bins)))
+            heat_left[ly_idx, 1] += 1
+            heat_right[ry_idx, bins - 2] += 1
+            if reward > 0 and reward < 0.5:
+                heat_hits[y, x] += 1
+            left_score = info.get("left_score", last_left)
+            right_score = info.get("right_score", last_right)
+            if left_score != last_left or right_score != last_right:
+                heat_scores[y, x] += 1
+                last_left, last_right = left_score, right_score
             if terminated or truncated:
                 obs, _ = env.reset()
-        _HEATMAP_CACHE = heat.tolist()
+        _HEATMAP_CACHE = {
+            "ball": heat_ball.tolist(),
+            "paddles": (heat_left + heat_right).tolist(),
+            "hits": heat_hits.tolist(),
+            "scores": heat_scores.tolist(),
+        }
         _HEATMAP_TS = now
         return _HEATMAP_CACHE
     finally:
@@ -218,7 +241,13 @@ def _dashboard_html() -> str:
             <div id="stopReason">--</div>
           </div>
           <div class="card">
-            <div class="label">Animated Heatmap</div>
+            <div class="label">Heatmaps</div>
+            <div class="menu" style="margin-bottom:8px;">
+              <button data-heat="ball" class="active">Ball Density</button>
+              <button data-heat="paddles">Paddle Density</button>
+              <button data-heat="hits">Hit Hotspots</button>
+              <button data-heat="scores">Score Zones</button>
+            </div>
             <canvas id="heatmap" width="400" height="400"></canvas>
             <div id="heatmapNote" class="label" style="margin-top:6px;">--</div>
           </div>
@@ -289,6 +318,8 @@ def _dashboard_html() -> str:
 let lastCombined = "";
 let lastEval = "";
 let lastStatusTick = 0;
+let heatmapMode = "ball";
+let heatmapCache = {};
 
 async function refreshStatus() {
   try {
@@ -332,7 +363,8 @@ async function refreshHeatmap() {
     drawEmpty(document.getElementById('heatmap'), 'Heatmap error');
     return;
   }
-  const heat = data.heatmap || [];
+  heatmapCache = data.heatmap || {};
+  const heat = heatmapCache[heatmapMode] || [];
   const canvas = document.getElementById('heatmap');
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -341,7 +373,7 @@ async function refreshHeatmap() {
     drawEmpty(canvas, 'No heatmap data');
     return;
   }
-  document.getElementById('heatmapNote').textContent = 'Live density from latest model.';
+  document.getElementById('heatmapNote').textContent = `Live ${heatmapMode} density from latest model.`;
   const rows = heat.length;
   const cols = heat[0].length;
   const max = Math.max(...heat.flat());
@@ -360,13 +392,41 @@ refreshStatus();
 refreshHeatmap();
 refreshCharts();
 
-document.querySelectorAll('.menu button').forEach(btn => {
+document.querySelectorAll('.sidebar .menu button[data-panel]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.menu button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.sidebar .menu button[data-panel]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const panel = btn.getAttribute('data-panel');
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    document.getElementById(`panel-${panel}`).classList.add('active');
+    const target = document.getElementById(`panel-${panel}`);
+    if (target) target.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.card .menu button[data-heat]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.card .menu button[data-heat]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    heatmapMode = btn.getAttribute('data-heat');
+    const heat = heatmapCache[heatmapMode] || [];
+    if (heat.length) {
+      const canvas = document.getElementById('heatmap');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const rows = heat.length;
+      const cols = heat[0].length;
+      const max = Math.max(...heat.flat());
+      for (let y=0; y<rows; y++) {
+        for (let x=0; x<cols; x++) {
+          const v = heat[y][x] / (max || 1);
+          ctx.fillStyle = `rgba(20,241,149,${v})`;
+          ctx.fillRect(x * canvas.width / cols, y * canvas.height / rows, canvas.width / cols, canvas.height / rows);
+        }
+      }
+      document.getElementById('heatmapNote').textContent = `Live ${heatmapMode} density from latest model.`;
+    } else {
+      drawEmpty(document.getElementById('heatmap'), 'No heatmap data');
+    }
   });
 });
 
@@ -404,6 +464,28 @@ async function refreshCharts() {
     byCycle.get(row.cycle).push(row);
   }
   const cycles = Array.from(byCycle.keys()).sort((a,b)=>a-b);
+  if (cycles.length === 1) {
+    const rows = byCycle.get(cycles[0]);
+    const rewardVals = rows.map(r => r.avg_reward);
+    const winVals = rows.map(r => r.win_rate);
+    const deltaVals = rows.map(r => r.delta_reward);
+    const rallyVals = rows.map(r => r.avg_rally_length);
+    const minMaxAvg = (vals) => {
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+      return {min, max, avg};
+    };
+    const rewardStats = minMaxAvg(rewardVals);
+    const winStats = minMaxAvg(winVals);
+    const deltaStats = minMaxAvg(deltaVals);
+    const rallyStats = minMaxAvg(rallyVals);
+    drawRangeChart(document.getElementById('chartReward'), rewardStats, '#14f195', 'Avg Reward (single cycle)');
+    drawRangeChart(document.getElementById('chartWin'), winStats, '#f5a623', 'Win Rate (single cycle)', 0, 1);
+    drawRangeChart(document.getElementById('chartDelta'), deltaStats, '#7cc6ff', 'Delta Reward (single cycle)');
+    drawRangeChart(document.getElementById('chartRally'), rallyStats, '#ff5f7a', 'Avg Rally Length (single cycle)');
+    return;
+  }
   const rewardsBest = cycles.map(c => {
     const rows = byCycle.get(c);
     return rows.reduce((acc, r) => Math.max(acc, r.avg_reward), -999);
@@ -513,6 +595,41 @@ function drawEmpty(canvas, label) {
   ctx.fillStyle = '#8aa3c5';
   ctx.font = '12px Segoe UI';
   ctx.fillText(label, 30, canvas.height / 2);
+}
+
+function drawRangeChart(canvas, stats, color, title, minOverride, maxOverride) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const pad = 28;
+  const w = canvas.width - pad*2;
+  const h = canvas.height - pad*2;
+  const minY = (minOverride !== undefined) ? minOverride : stats.min;
+  const maxY = (maxOverride !== undefined) ? maxOverride : stats.max;
+  ctx.strokeStyle = '#243447';
+  ctx.strokeRect(pad, pad, w, h);
+  ctx.fillStyle = '#8aa3c5';
+  ctx.font = '11px Segoe UI';
+  ctx.fillText(title, pad, 14);
+  ctx.fillText(maxY.toFixed(2), 4, pad + 6);
+  ctx.fillText(minY.toFixed(2), 4, pad + h);
+  const midY = pad + h / 2;
+  const rangeMinX = pad + ((stats.min - minY) / ((maxY - minY) || 1)) * w;
+  const rangeMaxX = pad + ((stats.max - minY) / ((maxY - minY) || 1)) * w;
+  const avgX = pad + ((stats.avg - minY) / ((maxY - minY) || 1)) * w;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(rangeMinX, midY);
+  ctx.lineTo(rangeMaxX, midY);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(avgX, midY, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8aa3c5';
+  ctx.fillText(`min ${stats.min.toFixed(2)}`, pad, midY + 20);
+  ctx.fillText(`avg ${stats.avg.toFixed(2)}`, pad + 120, midY + 20);
+  ctx.fillText(`max ${stats.max.toFixed(2)}`, pad + 230, midY + 20);
 }
 </script>
 </body>
