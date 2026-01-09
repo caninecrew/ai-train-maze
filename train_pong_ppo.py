@@ -217,8 +217,8 @@ class TrainConfig:
     learning_rate: float = 2.5e-4
     device: str = "auto"
     target_fps: int = 30
-    max_video_seconds: int = 180  # total seconds per cycle video
-    video_steps: int = 3600  # total frames per cycle video
+    max_video_seconds: int = 30  # total seconds per cycle video
+    video_steps: int = 600  # total frames per cycle video
     max_cycles: int = 1
     checkpoint_interval: int = 1  # cycles between timestamped checkpoints
     iterations_per_set: int = 6  # how many parallel model lines to train each cycle
@@ -238,6 +238,8 @@ class TrainConfig:
     log_dir: str = "logs"
     metrics_csv: str = "logs/metrics.csv"
     config_path: Optional[str] = None
+    profile: Optional[str] = None
+    dry_run: bool = False
 
     @property
     def max_video_frames(self) -> int:
@@ -263,6 +265,64 @@ def _load_config_file(path: Optional[str]) -> Dict[str, Any]:
     return data
 
 
+def _apply_profile(cfg: TrainConfig) -> None:
+    """
+    Apply preset overrides for common workflows.
+    """
+    if not cfg.profile:
+        return
+    profiles: Dict[str, Dict[str, Any]] = {
+        "quick": {
+            "train_timesteps": 10_000,
+            "iterations_per_set": 1,
+            "max_cycles": 1,
+            "eval_episodes": 1,
+            "video_steps": 300,
+            "max_video_seconds": 20,
+            "checkpoint_interval": 0,
+            "no_checkpoint": True,
+        },
+        "single": {
+            "iterations_per_set": 1,
+            "n_envs": 4,
+            "eval_episodes": max(1, cfg.eval_episodes),
+        },
+        "gpu": {
+            "device": "cuda",
+            "batch_size": max(cfg.batch_size, 1024),
+            "n_envs": max(cfg.n_envs, 16),
+            "train_timesteps": max(cfg.train_timesteps, 500_000),
+        },
+    }
+    overrides = profiles.get(cfg.profile)
+    if overrides:
+        for key, value in overrides.items():
+            setattr(cfg, key, value)
+        print(f"Applied profile '{cfg.profile}' overrides: {overrides}")
+
+
+_progress_bar_checked = False
+_progress_bar_available = False
+
+
+def _progress_bar_ready() -> bool:
+    """
+    Check if optional progress bar deps are present. Prints a hint only once.
+    """
+    global _progress_bar_checked, _progress_bar_available
+    if _progress_bar_checked:
+        return _progress_bar_available
+    _progress_bar_checked = True
+    try:
+        import rich  # type: ignore  # noqa: F401
+        import tqdm  # type: ignore  # noqa: F401
+
+        _progress_bar_available = True
+    except Exception:
+        print("Progress bar disabled (install 'rich' and 'tqdm' or stable-baselines3[extra] to enable).")
+    return _progress_bar_available
+
+
 def parse_args() -> TrainConfig:
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument("--config", type=str, help="Path to YAML/JSON config to merge.")
@@ -270,6 +330,7 @@ def parse_args() -> TrainConfig:
     file_cfg = _load_config_file(known.config)
 
     parser = argparse.ArgumentParser(description="Train PPO agents for custom Pong.", parents=[base_parser])
+    parser.add_argument("--profile", choices=["quick", "single", "gpu"], help="Preset overrides for common workflows.")
     parser.add_argument("--train-timesteps", type=int, default=file_cfg.get("train_timesteps", TrainConfig.train_timesteps))
     parser.add_argument("--n-steps", type=int, default=file_cfg.get("n_steps", TrainConfig.n_steps))
     parser.add_argument("--batch-size", type=int, default=file_cfg.get("batch_size", TrainConfig.batch_size))
@@ -279,7 +340,12 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--device", type=str, default=file_cfg.get("device", TrainConfig.device))
     parser.add_argument("--target-fps", type=int, default=file_cfg.get("target_fps", TrainConfig.target_fps))
     parser.add_argument("--max-video-seconds", type=int, default=file_cfg.get("max_video_seconds", TrainConfig.max_video_seconds))
-    parser.add_argument("--video-steps", type=int, default=file_cfg.get("video_steps", TrainConfig.video_steps))
+    parser.add_argument(
+        "--video-steps",
+        type=int,
+        default=file_cfg.get("video_steps", TrainConfig.video_steps),
+        help="Frames captured per clip; e.g., 1800 ≈ 60s at 30 fps, 3600 ≈ 2min.",
+    )
     parser.add_argument("--max-cycles", type=int, default=file_cfg.get("max_cycles", TrainConfig.max_cycles))
     parser.add_argument("--checkpoint-interval", type=int, default=file_cfg.get("checkpoint_interval", TrainConfig.checkpoint_interval))
     parser.add_argument("--iterations-per-set", type=int, default=file_cfg.get("iterations_per_set", TrainConfig.iterations_per_set))
@@ -298,6 +364,7 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--model-dir", type=str, default=file_cfg.get("model_dir", TrainConfig.model_dir))
     parser.add_argument("--log-dir", type=str, default=file_cfg.get("log_dir", TrainConfig.log_dir))
     parser.add_argument("--metrics-csv", type=str, default=file_cfg.get("metrics_csv", TrainConfig.metrics_csv))
+    parser.add_argument("--dry-run", action="store_true", help="Parse config, build envs, and exit without training.")
     args = parser.parse_args(remaining)
     cfg = TrainConfig(
         train_timesteps=args.train_timesteps,
@@ -329,7 +396,10 @@ def parse_args() -> TrainConfig:
         log_dir=args.log_dir,
         metrics_csv=args.metrics_csv,
         config_path=known.config,
+        profile=args.profile,
+        dry_run=args.dry_run,
     )
+    _apply_profile(cfg)
     return cfg
 
 
@@ -455,15 +525,7 @@ def _train_single(
             device=cfg.device,
         )
 
-    progress_bar = False
-    try:
-        import rich  # type: ignore  # noqa: F401
-        import tqdm  # type: ignore  # noqa: F401
-        progress_bar = True
-    except Exception:
-        pass
-
-    model.learn(total_timesteps=cfg.train_timesteps, reset_num_timesteps=False, progress_bar=progress_bar)
+    model.learn(total_timesteps=cfg.train_timesteps, reset_num_timesteps=False, progress_bar=_progress_bar_ready())
 
     stamped_model_path: Optional[str] = None
     if cfg.checkpoint_interval > 0 and not cfg.no_checkpoint:
@@ -494,6 +556,13 @@ def main():
     random.seed(base_seed)
     np.random.seed(base_seed)
 
+    print(
+        f"Config: profile={cfg.profile or 'none'}, train_steps={cfg.train_timesteps}, "
+        f"iters_per_set={cfg.iterations_per_set}, max_cycles={cfg.max_cycles}, "
+        f"video_steps={cfg.video_steps} (~{cfg.video_steps / cfg.target_fps:.1f}s @ {cfg.target_fps} fps)"
+    )
+    _progress_bar_ready()
+
     run_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     Path(cfg.model_dir).mkdir(parents=True, exist_ok=True)
     Path(cfg.log_dir).mkdir(parents=True, exist_ok=True)
@@ -504,6 +573,12 @@ def main():
 
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps({"event": "config", **asdict(cfg), "resolved_at": run_timestamp}) + "\n")
+    if cfg.dry_run:
+        env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None)
+        obs, info = env.reset()
+        env.close()
+        print("Dry run: environment initialized successfully. Exiting before training.")
+        return
 
     model_ids = [f"ppo_pong_custom_{i}" for i in range(cfg.iterations_per_set)]
     ball_colors = [
@@ -515,6 +590,9 @@ def main():
 
     failure_detected = False
     best_score = float("-inf")
+    best_overall_id: Optional[str] = None
+    best_overall_score = float("-inf")
+    last_combined_video: Optional[str] = None
     no_improve_cycles = 0
     max_video_frames = cfg.max_video_frames
     top_checkpoints: List[Tuple[float, str]] = []
@@ -529,7 +607,7 @@ def main():
         pong_flags: List[bool] = []
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         cycle += 1
-        print(f"\n=== Cycle {cycle} ===")
+        print(f"\n=== Cycle {cycle} / {cfg.max_cycles} ===")
         start_cycle = time.time()
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=cfg.iterations_per_set) as executor:
@@ -636,6 +714,8 @@ def main():
 
             if best_score_cycle > best_score + cfg.improvement_threshold:
                 best_score = best_score_cycle
+                best_overall_id = best_id
+                best_overall_score = best_score_cycle
                 no_improve_cycles = 0
             else:
                 no_improve_cycles += 1
@@ -661,6 +741,7 @@ def main():
             combined_video_path = Path(cfg.video_dir) / f"ppo_pong_combined_{timestamp}.mp4"
             if _safe_write_video(all_grid_frames, combined_video_path, cfg.target_fps):
                 print(f"Saved combined video with all models in a grid: {combined_video_path} (frames: {len(all_grid_frames)})")
+                last_combined_video = str(combined_video_path)
         else:
             print("No frames captured; combined video not written.")
 
@@ -671,6 +752,28 @@ def main():
                 indiv_path = Path(cfg.video_dir) / f"{model_id}_{timestamp}.mp4"
                 if _safe_write_video(frames, indiv_path, cfg.target_fps):
                     print(f"[{model_id}] Saved individual video: {indiv_path}")
+
+    summary = {
+        "event": "summary",
+        "best_model": best_overall_id,
+        "best_score": best_overall_score,
+        "metrics_csv": cfg.metrics_csv,
+        "video_dir": cfg.video_dir,
+        "last_combined_video": last_combined_video,
+        "run_timestamp": run_timestamp,
+    }
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(summary) + "\n")
+    print("\n=== Run Summary ===")
+    print(f"Best model: {best_overall_id or 'n/a'} (avg reward {best_overall_score:.3f})")
+    print(f"Metrics CSV: {cfg.metrics_csv}")
+    if last_combined_video:
+        print(f"Last combined video: {last_combined_video}")
+    print(f"Models dir: {cfg.model_dir} | Videos dir: {cfg.video_dir}")
+    if _tensorboard_available():
+        print(f"TensorBoard available: run `tensorboard --logdir {cfg.log_dir}`")
+    else:
+        print("TensorBoard not installed; install tensorboard to view training curves.")
 
 if __name__ == "__main__":
     main()
