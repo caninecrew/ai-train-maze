@@ -14,7 +14,7 @@ from train_pong_ppo import SB3PongEnv
 from pong import simple_tracking_policy
 
 
-ROOT = Path.cwd()
+ROOT = Path(__file__).resolve().parent
 _HEATMAP_CACHE: Optional[dict] = None
 _HEATMAP_TS = 0.0
 _ANNOTATIONS_FILE = ROOT / "logs" / "annotations.json"
