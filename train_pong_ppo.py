@@ -217,8 +217,8 @@ class TrainConfig:
     learning_rate: float = 2.5e-4
     device: str = "auto"
     target_fps: int = 30
-    max_video_seconds: int = 120
-    video_steps: int = 400
+    max_video_seconds: int = 180  # total seconds per cycle video
+    video_steps: int = 3600  # total frames per cycle video
     max_cycles: int = 1
     checkpoint_interval: int = 1  # cycles between timestamped checkpoints
     iterations_per_set: int = 6  # how many parallel model lines to train each cycle
