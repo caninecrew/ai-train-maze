@@ -120,8 +120,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/heatmap":
             model_path = ROOT / "models" / "ppo_pong_custom_latest.zip"
-            heat = _heatmap_from_model(model_path)
-            self._send(200, json.dumps({"heatmap": heat}).encode("utf-8"), "application/json")
+            try:
+                heat = _heatmap_from_model(model_path)
+                self._send(200, json.dumps({"heatmap": heat}).encode("utf-8"), "application/json")
+            except Exception as exc:
+                self._send(200, json.dumps({"heatmap": [], "error": str(exc)}).encode("utf-8"), "application/json")
             return
         if parsed.path == "/file":
             qs = parse_qs(parsed.query)
@@ -321,6 +324,11 @@ async function refreshHeatmap() {
     drawEmpty(document.getElementById('heatmap'), 'Heatmap error');
     return;
   }
+  if (data.error) {
+    document.getElementById('heatmapNote').textContent = `Heatmap error: ${data.error}`;
+    drawEmpty(document.getElementById('heatmap'), 'Heatmap error');
+    return;
+  }
   const heat = data.heatmap || [];
   const canvas = document.getElementById('heatmap');
   const ctx = canvas.getContext('2d');
@@ -442,6 +450,17 @@ function drawLineChart(canvas, xs, ys, color) {
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.stroke();
+  // Draw points so single-cycle data is visible.
+  xs.forEach((x, i) => {
+    const nx = i / (xs.length - 1 || 1);
+    const ny = (ys[i] - minY) / ((maxY - minY) || 1);
+    const px = pad + nx * w;
+    const py = pad + (1 - ny) * h;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(px, py, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 function drawEmpty(canvas, label) {
