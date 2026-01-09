@@ -26,6 +26,17 @@ try:
 except Exception:  # pragma: no cover - optional dep
     yaml = None
 
+
+
+def _tensorboard_available() -> bool:
+    """Return True if tensorboard is installed; avoid hard dependency at runtime."""
+    try:
+        import tensorboard  # type: ignore  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 from pong import (
     PongEnv,
     simple_tracking_policy,
@@ -413,17 +424,22 @@ def _train_single(
     Path(cfg.model_dir).mkdir(parents=True, exist_ok=True)
     latest_path = os.path.join(cfg.model_dir, f"{model_id}_latest.zip")
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    tb_log_dir = cfg.log_dir if _tensorboard_available() else None
+    if tb_log_dir is None:
+        print(f"[{model_id}] TensorBoard not installed; disabling tensorboard logging.")
 
     if os.path.exists(latest_path):
         print(f"[{model_id}] Loading existing model from {latest_path} to continue training...")
         model = PPO.load(latest_path, env=env, device=cfg.device)
+        if tb_log_dir is None:
+            model.tensorboard_log = None
     else:
         print(f"[{model_id}] No existing model found; starting a fresh PPO model...")
         model = PPO(
             "MlpPolicy",
             env,
             verbose=1,
-            tensorboard_log=cfg.log_dir,
+            tensorboard_log=tb_log_dir,
             n_steps=cfg.n_steps,
             batch_size=cfg.batch_size,
             n_epochs=cfg.n_epochs,
