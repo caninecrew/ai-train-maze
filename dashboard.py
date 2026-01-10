@@ -634,6 +634,8 @@ let annotationsCache = [];
 let selectedRun = "all";
 let compareMode = "avg";
 let rollingEnabled = false;
+let activePanel = "overview";
+let lastReportKey = "";
 
 async function refreshStatus() {
   try {
@@ -724,6 +726,7 @@ document.querySelectorAll('.sidebar .menu button[data-panel]').forEach(btn => {
     document.querySelectorAll('.sidebar .menu button[data-panel]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const panel = btn.getAttribute('data-panel');
+    activePanel = panel || 'overview';
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     const target = document.getElementById(`panel-${panel}`);
     if (target) target.classList.add('active');
@@ -1143,9 +1146,13 @@ async function refreshReports() {
     const res = await fetch('/api/reports');
     const data = await res.json();
     reportCache = data.reports || [];
-    updateRunSelectors();
-    updateTimeline();
-    updateCohorts();
+    const key = reportCache.map(r => r.run_timestamp || '').join('|');
+    if (key !== lastReportKey) {
+      updateRunSelectors();
+      updateTimeline();
+      updateCohorts();
+      lastReportKey = key;
+    }
     const status = document.getElementById('cohortStatus');
     if (status) status.textContent = `Runs available: ${reportCache.length}`;
   } catch (err) {
@@ -1211,6 +1218,8 @@ function updateTimeline() {
 function updateCohorts() {
   const selectA = document.getElementById('cohortA');
   const selectB = document.getElementById('cohortB');
+  const prevA = selectA.value;
+  const prevB = selectB.value;
   [selectA, selectB].forEach(sel => {
     sel.innerHTML = '';
     const optAll = document.createElement('option');
@@ -1225,8 +1234,12 @@ function updateCohorts() {
     });
   });
   if (reportCache.length) {
-    selectA.value = reportCache[0].run_timestamp || 'all';
-    selectB.value = reportCache[Math.min(1, reportCache.length - 1)].run_timestamp || 'all';
+    const defaultA = reportCache[0].run_timestamp || 'all';
+    const defaultB = reportCache[Math.min(1, reportCache.length - 1)].run_timestamp || 'all';
+    const valuesA = Array.from(selectA.options).map(o => o.value);
+    const valuesB = Array.from(selectB.options).map(o => o.value);
+    selectA.value = valuesA.includes(prevA) ? prevA : defaultA;
+    selectB.value = valuesB.includes(prevB) ? prevB : defaultB;
   } else {
     selectA.value = 'all';
     selectB.value = 'all';
@@ -1239,6 +1252,16 @@ function renderCohortTable() {
   const runB = document.getElementById('cohortB').value;
   const seriesA = filterByRun(metricsSeries, runA);
   const seriesB = filterByRun(metricsSeries, runB);
+  const status = document.getElementById('cohortStatus');
+  if (status) {
+    const missingA = runA !== 'all' && !seriesA.length;
+    const missingB = runB !== 'all' && !seriesB.length;
+    if (missingA || missingB) {
+      status.textContent = 'Runs available: metrics for selected runs not yet tagged';
+    } else {
+      status.textContent = `Runs available: ${reportCache.length}`;
+    }
+  }
   const rewardA = seriesA.length ? avgOf(seriesA, 'avg_reward') : avgRewardFromReport(runA);
   const rewardB = seriesB.length ? avgOf(seriesB, 'avg_reward') : avgRewardFromReport(runB);
   const rows = [
