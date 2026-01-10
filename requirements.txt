@@ -19,3 +19,6 @@ pytest>=7.4
 
 rich>=13.4.6
 tqdm>=4.66.4
+matplotlib>=3.8
+
+imageio[ffmpeg]
