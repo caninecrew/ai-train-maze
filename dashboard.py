@@ -441,6 +441,7 @@ def _dashboard_html() -> str:
       <div class="sidebar">
         <h2>Dashboard</h2>
         <div class="menu">
+          <button data-panel="all">All</button>
           <button data-panel="overview" class="active">Overview</button>
           <button data-panel="charts">Charts</button>
           <button data-panel="insights">Insights</button>
@@ -927,6 +928,11 @@ document.querySelectorAll('.sidebar .menu button[data-panel]').forEach(btn => {
     const panel = btn.getAttribute('data-panel');
     activePanel = panel || 'overview';
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    if (panel === 'all') {
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('active'));
+      refreshReports();
+      return;
+    }
     const target = document.getElementById(`panel-${panel}`);
     if (target) target.classList.add('active');
     if (panel === 'cohorts') {
