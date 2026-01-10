@@ -564,7 +564,7 @@ def _train_single(
     color: Tuple[int, int, int],
     cfg: TrainConfig,
     seed: int,
-) -> Tuple[str, Dict[str, float], List[np.ndarray], bool, str, str, Optional[str]]:
+) -> Tuple[str, Dict[str, float], str, str, Optional[str]]:
     """Train one model line in isolation (separate process-friendly)."""
     set_random_seed(seed)
     random.seed(seed)
