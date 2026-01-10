@@ -12,6 +12,7 @@ warnings.filterwarnings(
 
 import numpy as np
 import pygame
+from numpy.typing import NDArray
 
 
 # ----------------------------
@@ -234,7 +235,7 @@ class PongEnv:
 
         return obs, reward_left, done, info
 
-    def render(self) -> None:
+    def render(self) -> Optional[NDArray[np.uint8]]:
         if self.render_mode not in ("human", "rgb_array") or self.screen is None:
             return
 
@@ -269,7 +270,7 @@ class PongEnv:
         elif self.render_mode == "rgb_array":
             # Convert surface to (H, W, 3) numpy array for video capture.
             frame = pygame.surfarray.array3d(self.screen)
-            frame = np.transpose(frame, (1, 0, 2))
+            frame = np.transpose(frame, (1, 0, 2)).astype(np.uint8, copy=False)
             return frame
 
     def close(self) -> None:
@@ -398,7 +399,7 @@ def play_human_vs_model(model_path: str, human_left: bool = True) -> None:
         elif keys[pygame.K_s]:
             human_action = DOWN
 
-        model_action, _ = model.predict(obs, deterministic=True)
+        model_action, _ = model.predict(np.array(obs, dtype=np.float32), deterministic=True)
         if human_left:
             left_action = human_action
             right_action = int(model_action)
@@ -419,8 +420,8 @@ def play_model_vs_model(left_path: str, right_path: str) -> None:
     right_model = PPO.load(right_path, device="cpu")
     obs, _ = env.reset()
     while True:
-        left_action, _ = left_model.predict(obs, deterministic=True)
-        right_action, _ = right_model.predict(obs, deterministic=True)
+        left_action, _ = left_model.predict(np.array(obs, dtype=np.float32), deterministic=True)
+        right_action, _ = right_model.predict(np.array(obs, dtype=np.float32), deterministic=True)
         obs, _, done, _ = env.step(int(left_action), int(right_action))
         if done:
             obs, _ = env.reset()
