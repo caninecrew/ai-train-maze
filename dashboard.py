@@ -1236,8 +1236,10 @@ function renderCohortTable() {
   const runB = document.getElementById('cohortB').value;
   const seriesA = filterByRun(metricsSeries, runA);
   const seriesB = filterByRun(metricsSeries, runB);
+  const rewardA = seriesA.length ? avgOf(seriesA, 'avg_reward') : avgRewardFromReport(runA);
+  const rewardB = seriesB.length ? avgOf(seriesB, 'avg_reward') : avgRewardFromReport(runB);
   const rows = [
-    ['Avg Reward', avgOf(seriesA, 'avg_reward'), avgOf(seriesB, 'avg_reward')],
+    ['Avg Reward', rewardA, rewardB],
     ['Win Rate', avgOf(seriesA, 'win_rate'), avgOf(seriesB, 'win_rate')],
     ['Return Rate', avgOf(seriesA, 'avg_return_rate'), avgOf(seriesB, 'avg_return_rate')],
     ['Rally Length', avgOf(seriesA, 'avg_rally_length'), avgOf(seriesB, 'avg_rally_length')],
@@ -1254,6 +1256,20 @@ function renderCohortTable() {
 function avgOf(series, key) {
   if (!series.length) return null;
   return series.reduce((a,b)=>a+b[key],0) / series.length;
+}
+
+function avgRewardFromReport(runId) {
+  if (!runId || runId === 'all') return null;
+  const report = reportCache.find(r => r.run_timestamp === runId);
+  const cycles = report?.summary?.cycles || [];
+  const scores = [];
+  cycles.forEach(cycle => {
+    (cycle.scores || []).forEach(pair => {
+      if (pair && pair.length >= 2) scores.push(pair[1]);
+    });
+  });
+  if (!scores.length) return null;
+  return scores.reduce((a,b)=>a+b,0) / scores.length;
 }
 
 function fmt(val) {
