@@ -19,6 +19,25 @@ ROOT = Path(__file__).resolve().parent
 _HEATMAP_CACHE: Optional[dict] = None
 _HEATMAP_TS = 0.0
 _ANNOTATIONS_FILE = ROOT / "logs" / "annotations.json"
+_TB_CACHE: Optional[dict] = None
+_TB_TS = 0.0
+_TB_TAGS = {
+    "rollout/ep_rew_mean",
+    "rollout/ep_len_mean",
+    "time/fps",
+    "train/entropy_loss",
+    "train/value_loss",
+    "train/policy_gradient_loss",
+    "train/approx_kl",
+    "train/clip_fraction",
+    "train/learning_rate",
+}
+_TB_SUFFIXES = (
+    "/avg_reward",
+    "/win_rate",
+    "/avg_return_rate",
+    "/avg_rally_length",
+)
 
 
 def _latest_report(log_dir: Path) -> Optional[Path]:
@@ -149,6 +168,71 @@ def _heatmap_from_model(model_path: Path, steps: int = 1500, bins: int = 40) -> 
         env.close()
 
 
+def _tensorboard_available() -> bool:
+    try:
+        from tensorboard.backend.event_processing import event_accumulator  # type: ignore
+    except Exception:
+        return False
+    return True
+
+
+def _keep_tensorboard_tag(tag: str) -> bool:
+    if tag in _TB_TAGS:
+        return True
+    return any(tag.endswith(suffix) for suffix in _TB_SUFFIXES)
+
+
+def _read_tensorboard(log_dir: Path, max_files: int = 3, max_points: int = 400) -> dict:
+    global _TB_CACHE, _TB_TS
+    now = time.time()
+    if _TB_CACHE is not None and (now - _TB_TS) < 10:
+        return _TB_CACHE
+    if not _tensorboard_available():
+        _TB_CACHE = {"available": False, "error": "tensorboard not installed"}
+        _TB_TS = now
+        return _TB_CACHE
+    event_files = sorted(log_dir.rglob("events.out.tfevents.*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not event_files:
+        _TB_CACHE = {"available": True, "series": {}, "latest": {}, "sources": []}
+        _TB_TS = now
+        return _TB_CACHE
+    from tensorboard.backend.event_processing import event_accumulator  # type: ignore
+
+    series: Dict[str, List[List[float]]] = {}
+    latest: Dict[str, Dict[str, float]] = {}
+    sources: List[str] = []
+    for path in event_files[:max_files]:
+        try:
+            acc = event_accumulator.EventAccumulator(str(path), size_guidance={"scalars": max_points})
+            acc.Reload()
+            sources.append(str(path.relative_to(ROOT)))
+            for tag in acc.Tags().get("scalars", []):
+                if not _keep_tensorboard_tag(tag):
+                    continue
+                events = acc.Scalars(tag)
+                if not events:
+                    continue
+                values = [[float(e.step), float(e.value)] for e in events]
+                series.setdefault(tag, []).extend(values)
+        except Exception:
+            continue
+    for tag, points in series.items():
+        points.sort(key=lambda p: p[0])
+        dedup: Dict[float, float] = {}
+        for step, val in points:
+            dedup[step] = val
+        cleaned = [[step, val] for step, val in sorted(dedup.items())]
+        if len(cleaned) > max_points:
+            stride = max(1, len(cleaned) // max_points)
+            cleaned = cleaned[::stride]
+        series[tag] = cleaned
+        if cleaned:
+            latest[tag] = {"step": cleaned[-1][0], "value": cleaned[-1][1]}
+    _TB_CACHE = {"available": True, "series": series, "latest": latest, "sources": sources}
+    _TB_TS = now
+    return _TB_CACHE
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     def _send(self, code: int, content: bytes, content_type: str = "text/html") -> None:
         self.send_response(code)
@@ -247,6 +331,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps({"heatmap": heat}).encode("utf-8"), "application/json")
             except Exception as exc:
                 self._send(200, json.dumps({"heatmap": [], "error": str(exc)}).encode("utf-8"), "application/json")
+            return
+        if parsed.path == "/api/tensorboard":
+            payload = _read_tensorboard(ROOT / "logs")
+            self._send(200, json.dumps(_sanitize_json(payload), allow_nan=False).encode("utf-8"), "application/json")
             return
         if parsed.path == "/file":
             qs = parse_qs(parsed.query)
@@ -562,6 +650,20 @@ def _dashboard_html() -> str:
             <div id="timelineDetail" class="tiny" style="margin-top:8px;">--</div>
           </div>
           <div class="card">
+            <div class="label">TensorBoard Signals</div>
+            <div class="tiny" id="tbStatus">Loading TensorBoard metrics...</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Latest</th>
+                  <th>Step</th>
+                </tr>
+              </thead>
+              <tbody id="tbTable"></tbody>
+            </table>
+          </div>
+          <div class="card">
             <div class="label">Video Insights</div>
             <div class="tiny">Highlights from the longest rallies.</div>
             <div class="tiny">Long rallies often show strong defense.</div>
@@ -756,8 +858,59 @@ async function refreshHeatmap() {
   }
   document.getElementById('heatLegend').textContent = `0 -> ${max}`;
 }
+async function refreshTensorboard() {
+  const status = document.getElementById('tbStatus');
+  const tbody = document.getElementById('tbTable');
+  if (!status || !tbody) return;
+  try {
+    const res = await apiFetch('/api/tensorboard');
+    const data = await res.json();
+    if (!data.available) {
+      status.textContent = data.error || 'TensorBoard data unavailable.';
+      tbody.innerHTML = '';
+      return;
+    }
+    const latest = data.latest || {};
+    const tags = Object.keys(latest);
+    if (!tags.length) {
+      status.textContent = 'No TensorBoard scalars found yet.';
+      tbody.innerHTML = '';
+      return;
+    }
+    const preferred = [
+      'rollout/ep_rew_mean',
+      'rollout/ep_len_mean',
+      'time/fps',
+      'train/value_loss',
+      'train/policy_gradient_loss',
+      'train/entropy_loss',
+      'train/approx_kl',
+      'train/clip_fraction',
+      'train/learning_rate',
+    ];
+    const ordered = [];
+    preferred.forEach(tag => { if (latest[tag]) ordered.push(tag); });
+    tags.filter(tag => !ordered.includes(tag)).sort().forEach(tag => ordered.push(tag));
+    const sources = (data.sources || []).slice(0, 3).join(' | ');
+    status.textContent = sources ? `Sources: ${sources}` : 'TensorBoard signals loaded.';
+    const rows = ordered.slice(0, 12);
+    tbody.innerHTML = '';
+    rows.forEach(tag => {
+      const entry = latest[tag];
+      const value = entry && entry.value !== undefined ? entry.value : null;
+      const step = entry && entry.step !== undefined ? entry.step : null;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${tag}</td><td>${value === null ? '--' : value.toFixed(4)}</td><td>${step === null ? '--' : step}</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    status.textContent = `TensorBoard fetch failed: ${err}`;
+    tbody.innerHTML = '';
+  }
+}
 setInterval(refreshStatus, 2000);
 setInterval(refreshHeatmap, 5000);
+setInterval(refreshTensorboard, 5000);
 setInterval(refreshCharts, 3000);
 setInterval(refreshReports, 6000);
 setInterval(refreshAnnotations, 7000);

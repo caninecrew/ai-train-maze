@@ -22,3 +22,4 @@ tqdm>=4.66.4
 matplotlib>=3.8
 
 imageio[ffmpeg]
+tensorboard-plugin-wit>=1.8.1
