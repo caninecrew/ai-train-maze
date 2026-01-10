@@ -659,15 +659,8 @@ def _train_single(
     metrics = evaluate_model(model, cfg.eval_episodes, deterministic=cfg.eval_deterministic or cfg.deterministic)
     print(f"[{model_id}] Avg reward over {cfg.eval_episodes} eval episodes: {metrics['avg_reward']:.3f}")
 
-    segment, ponged = record_video_segment(
-        model,
-        ball_color=color,
-        steps=cfg.video_steps,
-        overlay_text=f"{model_id} | r {metrics['avg_reward']:.2f} | win {metrics['win_rate']:.2f}",
-        resolution=_parse_resolution(cfg.video_resolution),
-    )
     env.close()
-    return model_id, metrics, segment, ponged, timestamp, latest_path, stamped_model_path
+    return model_id, metrics, timestamp, latest_path, stamped_model_path
 
 
 def main():
@@ -765,7 +758,7 @@ def main():
 
             for future in concurrent.futures.as_completed(futures):
                 try:
-                    model_id, metrics, segment, ponged, stamp, latest_path, stamped_path = future.result()
+                    model_id, metrics, stamp, latest_path, stamped_path = future.result()
                 except Exception as exc:
                     if cfg.worker_watchdog:
                         print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
@@ -778,13 +771,30 @@ def main():
                 metrics_list.append((model_id, metrics, latest_path))
                 if stamped_path:
                     metrics_list[-1] = (model_id, metrics, stamped_path)
-                if segment:
-                    combined_frames_per_model.append(segment)
-                    segments_by_model[model_id] = segment
-                pong_flags.append(ponged)
                 timestamp = stamp  # use last reported for video naming
                 seed_used = seed_by_future.get(future, base_seed)
-                print(f"[{model_id}] Added {len(segment)} frames; Ponged: {ponged}; seed={seed_used}")
+                print(f"[{model_id}] Training done; seed={seed_used}")
+
+        if cfg.video_steps > 0 and metrics_list:
+            for model_id, metrics, model_path in metrics_list:
+                try:
+                    model = PPO.load(model_path, device="cpu")
+                    segment, ponged = record_video_segment(
+                        model,
+                        ball_color=ball_colors[model_ids.index(model_id) % len(ball_colors)],
+                        steps=cfg.video_steps,
+                        overlay_text=f"{model_id} | r {metrics['avg_reward']:.2f} | win {metrics['win_rate']:.2f}",
+                        resolution=_parse_resolution(cfg.video_resolution),
+                    )
+                    if segment:
+                        combined_frames_per_model.append(segment)
+                        segments_by_model[model_id] = segment
+                    pong_flags.append(ponged)
+                    print(f"[{model_id}] Added {len(segment)} frames; Ponged: {ponged}")
+                except Exception as exc:
+                    print(f"[{model_id}] Video capture failed: {exc}")
+        else:
+            print("Video capture disabled or no models; skipping video accumulation.")
 
         if combined_frames_per_model and any(combined_frames_per_model):
             grid_frames = build_grid_frames(combined_frames_per_model)
