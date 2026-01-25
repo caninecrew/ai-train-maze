@@ -219,11 +219,10 @@ def render_grid_frame(
     draw.ellipse((gx0 + pad, gy0 + pad, gx1 - pad, gy1 - pad), fill=goal_color)
 
     ar, ac = agent_pos
-    ax0 = float(ac * cell)
-    ay0 = float(ar * cell)
-    ax1 = float(ax0 + cell)
-    ay1 = float(ay0 + cell)
-    draw.ellipse((ax0 + pad, ay0 + pad, ax1 - pad, ay1 - pad), fill=agent_color)
+    ax = (ac) * cell
+    ay = (ar) * cell
+    radius = max(2, int(cell * 0.35))
+    draw.ellipse((ax - radius, ay - radius, ax + radius, ay + radius), fill=agent_color)
     return np.array(img)
 
 
