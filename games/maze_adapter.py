@@ -54,6 +54,7 @@ class MazeEnv(gym.Env):
         self._goal_bonus = 50.0
         self._idle_penalty = -0.05
         self._shaping_coef = 0.25
+        self._novelty_bonus = 0.05
 
         start = self._meta.get("start")
         goal = self._meta.get("goal")
@@ -94,6 +95,7 @@ class MazeEnv(gym.Env):
         self._agent = tuple(self._start)
         self._step_count = 0
         self._prev_dist = self._dist_at(self._agent)
+        self._visited = {self._agent}
         return self._obs(), {}
 
     def step(self, action):
@@ -109,6 +111,9 @@ class MazeEnv(gym.Env):
             if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
             self._prev_dist = new_dist
+            if self._agent not in self._visited:
+                reward += self._novelty_bonus
+                self._visited.add(self._agent)
         else:
             reward += self._wall_penalty
         if self._agent == (r, c):
