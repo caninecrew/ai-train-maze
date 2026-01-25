@@ -699,6 +699,7 @@ def main():
     best_checkpoint_path: Optional[str] = None
 
     cycle = 0
+    initial_resume = cfg.resume_from if (cfg.resume_from and os.path.exists(cfg.resume_from)) else None
     while not failure_detected and cycle < cfg.max_cycles:
         combined_frames_per_model: List[List[np.ndarray]] = []
         segments_by_model: Dict[str, List[np.ndarray]] = {}
@@ -713,6 +714,22 @@ def main():
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
         try:
+            if best_checkpoint_path and os.path.exists(best_checkpoint_path):
+                for model_id in model_ids:
+                    target_latest = os.path.join(cfg.model_dir, f"{model_id}_latest.zip")
+                    if best_checkpoint_path != target_latest:
+                        try:
+                            shutil.copy2(best_checkpoint_path, target_latest)
+                        except OSError:
+                            pass
+            elif initial_resume:
+                for model_id in model_ids:
+                    target_latest = os.path.join(cfg.model_dir, f"{model_id}_latest.zip")
+                    if initial_resume != target_latest:
+                        try:
+                            shutil.copy2(initial_resume, target_latest)
+                        except OSError:
+                            pass
             with concurrent.futures.ProcessPoolExecutor(max_workers=cfg.iterations_per_set) as executor:
                 for idx, model_id in enumerate(model_ids):
                     derived_seed = base_seed + idx + cycle
