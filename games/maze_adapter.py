@@ -51,6 +51,7 @@ class MazeEnv(gym.Env):
         self._rows, self._cols = self._grid.shape
         self._max_steps = int(self._rows * self._cols * 2)
         self._step_count = 0
+        self._wall_penalty = -5.0
 
         start = meta.get("start")
         goal = meta.get("goal")
@@ -97,7 +98,7 @@ class MazeEnv(gym.Env):
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
         else:
-            reward -= 0.05
+            reward += self._wall_penalty
 
         self._step_count += 1
         terminated = self._agent == self._goal
@@ -125,7 +126,9 @@ class MazeEnv(gym.Env):
         if self._bg is None:
             if not self._png_path.exists():
                 raise FileNotFoundError(f"Maze PNG not found: {self._png_path}")
-            self._bg = Image.open(self._png_path).convert("RGB")
+            img = Image.open(self._png_path).convert("RGBA")
+            bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+            self._bg = Image.alpha_composite(bg, img).convert("RGB")
 
         frame = self._bg.copy()
         draw = ImageDraw.Draw(frame)
