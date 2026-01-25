@@ -122,7 +122,11 @@ jobs:
           if [ -z "$max_cycles" ]; then
             max_cycles="1"
           fi
-          python train.py --game "${{ inputs.train_game }}" --max-cycles "$max_cycles" ${{ inputs.train_args }}
+          game="${{ inputs.train_game }}"
+          if [ -z "$game" ]; then
+            game="maze"
+          fi
+          python train.py --game "$game" --max-cycles "$max_cycles" ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'
