@@ -14,7 +14,10 @@ from games.base import GameAdapter
 def _resolve_maze_id(maze_dir: str) -> str:
     maze_id = os.getenv("MAZE_ID", "").strip()
     if maze_id:
-        return str(maze_id).zfill(3)
+        raw = str(maze_id).strip()
+        if raw.lower().startswith("maze_"):
+            raw = raw.split("maze_", 1)[1]
+        return raw.zfill(3)
     return str(find_latest_maze_id(maze_dir)).zfill(3)
 
 
