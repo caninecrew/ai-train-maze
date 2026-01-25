@@ -20,6 +20,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
 
 from games.registry import get_game, list_games
+from maze_game import find_latest_maze_id, load_maze_files
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover - optional dep
@@ -433,6 +434,33 @@ def parse_args() -> TrainConfig:
     return cfg
 
 
+def _maze_video_resolution() -> Optional[str]:
+    maze_dir = os.getenv("MAZE_DIR", "data/mazes")
+    maze_id = os.getenv("MAZE_ID", "").strip()
+    if maze_id:
+        raw = maze_id
+        if raw.lower().startswith("maze_"):
+            raw = raw.split("maze_", 1)[1]
+        maze_id = raw.zfill(3)
+    else:
+        try:
+            maze_id = str(find_latest_maze_id(maze_dir)).zfill(3)
+        except Exception:
+            return None
+
+    try:
+        grid, _ = load_maze_files(maze_dir, maze_id, prefer_npy=True)
+    except Exception:
+        return None
+    cell_size_env = os.getenv("MAZE_CELL_SIZE", "").strip()
+    try:
+        cell_size = max(2, int(cell_size_env)) if cell_size_env else 8
+    except ValueError:
+        cell_size = 8
+    rows, cols = grid.shape
+    return f"{cols * cell_size}x{rows * cell_size}"
+
+
 def _print_status(cfg: TrainConfig) -> None:
     metrics_path = Path(cfg.metrics_csv)
     if not metrics_path.exists():
@@ -574,6 +602,10 @@ def _train_single(
 
 def main():
     cfg = parse_args()
+    if cfg.game == "maze":
+        maze_res = _maze_video_resolution()
+        if maze_res:
+            cfg.video_resolution = maze_res
     if cfg.list_games:
         print("Available games:")
         for game in list_games():
