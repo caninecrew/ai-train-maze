@@ -1,0 +1,141 @@
+name: maze-convert-and-train
+
+on:
+  workflow_dispatch:
+    inputs:
+      maze_id:
+        description: "Maze ID (e.g., maze_001)"
+        required: false
+        default: ""
+      rows:
+        description: "Fallback rows if no per-maze config"
+        required: false
+        default: "60"
+      cols:
+        description: "Fallback cols if no per-maze config"
+        required: false
+        default: "60"
+      train_game:
+        description: "Game adapter to train"
+        required: false
+        default: "template"
+      max_cycles:
+        description: "Training cycles"
+        required: false
+        default: "1"
+  push:
+    paths:
+      - "assets/mazes/*.png"
+      - "assets/mazes/*.json"
+      - "scripts/mazes/convert_png_to_grid.py"
+      - "configs/**"
+      - "games/**"
+      - "train.py"
+      - "requirements.txt"
+
+jobs:
+  convert_and_train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Convert latest maze
+        env:
+          MAZE_ID: ${{ inputs.maze_id }}
+          ROWS: ${{ inputs.rows }}
+          COLS: ${{ inputs.cols }}
+        run: |
+          set -e
+          if [ -n "$MAZE_ID" ]; then
+            png="assets/mazes/$MAZE_ID.png"
+          else
+            png="$(ls -t assets/mazes/maze_*.png 2>/dev/null | head -n 1)"
+          fi
+          if [ -z "$png" ]; then
+            echo "No maze PNGs found in assets/mazes."
+            exit 1
+          fi
+          maze_id="$(basename "$png" .png)"
+          cfg="assets/mazes/$maze_id.json"
+          out_dir="data/mazes/$maze_id"
+          mkdir -p "$out_dir"
+          cfg_arg=""
+          if [ -f "$cfg" ]; then
+            cfg_arg="--config $cfg"
+          fi
+          python scripts/mazes/convert_png_to_grid.py \
+            --png "$png" \
+            --rows "$ROWS" \
+            --cols "$COLS" \
+            --out "$out_dir/$maze_id" \
+            $cfg_arg
+
+      - name: Commit maze outputs
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/mazes/
+          if git diff --cached --quiet; then
+            echo "No maze outputs to commit."
+          else
+            git commit -m "Update maze grids (CI)"
+            git push
+          fi
+
+      - name: Train (after convert)
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          mkdir -p videos models logs
+          python train.py --game "${{ inputs.train_game }}" --max-cycles "${{ inputs.max_cycles }}"
+
+      - name: Commit training outputs
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -d models ]; then
+            latest_model="$(ls -t models/*.zip 2>/dev/null | head -n 1)"
+            if [ -n "$latest_model" ]; then
+              ls -t models/*.zip | tail -n +2 | xargs -r rm -f
+              git add "$latest_model"
+            fi
+          fi
+          if [ -d videos ]; then
+            latest_video="$(ls -t videos/*.mp4 2>/dev/null | head -n 1)"
+            if [ -n "$latest_video" ]; then
+              ls -t videos/*.mp4 | tail -n +2 | xargs -r rm -f
+              git add "$latest_video"
+            fi
+          fi
+          if [ -d logs ]; then
+            git add logs/ || true
+          fi
+          if git diff --cached --quiet; then
+            echo "No training outputs to commit."
+            exit 0
+          fi
+          git commit -m "Update training outputs (CI)"
+          git push

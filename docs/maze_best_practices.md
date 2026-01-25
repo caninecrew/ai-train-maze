@@ -81,8 +81,9 @@ Converter location:
 - `scripts/mazes/convert_png_to_grid.py`
 
 GitHub Actions automation:
-- The `maze-convert` workflow regenerates grids on push when a maze PNG changes.
-- Add a new maze as `assets/mazes/maze_###.png` and CI will write `data/mazes/maze_###/*`.
+- The `maze-convert-and-train` workflow runs conversion and training.
+- You can start it manually via workflow dispatch, or let it run on relevant pushes.
+- It converts the most recent maze by default, or uses the `maze_id` input when provided.
 - Optional per-maze settings live in `assets/mazes/maze_###.json` (e.g., rows/cols, threshold).
 
 ## Scalability strategy
