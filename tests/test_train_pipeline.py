@@ -7,8 +7,8 @@ import pytest
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from train_pong_ppo import (
-    SB3PongEnv,
+from games.pong_adapter import SB3PongEnv
+from train import (
     build_grid_frames,
     _add_overlay,
     parse_args,
@@ -16,11 +16,10 @@ from train_pong_ppo import (
     _train_single,
     _progress_bar_ready,
 )
-from pong import simple_tracking_policy
 
 
 def test_sb3_pong_env_rollout():
-    env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None)
+    env = SB3PongEnv(render_mode=None)
     obs, info = env.reset(seed=123)
     assert obs.shape == (6,)
     next_obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
@@ -49,10 +48,7 @@ def test_parse_args_reads_config(tmp_path, monkeypatch):
     cfg_file = tmp_path / "cfg.yaml"
     cfg_file.write_text(json.dumps({"n_steps": 5, "iterations_per_set": 1}))
     monkeypatch.setenv("PYTHONWARNINGS", "ignore")
-    monkeypatch.setattr(
-        "sys.argv",
-        ["train_pong_ppo.py", "--config", str(cfg_file), "--n-steps", "7", "--max-cycles", "1"],
-    )
+    monkeypatch.setattr("sys.argv", ["train.py", "--config", str(cfg_file), "--n-steps", "7", "--max-cycles", "1"])
     cfg = parse_args()
     assert cfg.n_steps == 7  # CLI override
     assert cfg.iterations_per_set == 1
@@ -71,7 +67,7 @@ def test_parse_args_profile_defaults(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "sys.argv",
-        ["train_pong_ppo.py", "--config", str(cfg_file), "--profile", "gpu"],
+        ["train.py", "--config", str(cfg_file), "--profile", "gpu"],
     )
     cfg = parse_args()
     assert cfg.n_steps == 2
@@ -80,7 +76,7 @@ def test_parse_args_profile_defaults(tmp_path, monkeypatch):
 
 
 def test_dry_run_status_and_warning(monkeypatch, capsys):
-    monkeypatch.setattr("sys.argv", ["train_pong_ppo.py", "--video-steps", "2000", "--max-video-seconds", "1"])
+    monkeypatch.setattr("sys.argv", ["train.py", "--video-steps", "2000", "--max-video-seconds", "1"])
     cfg = parse_args()
     captured = capsys.readouterr().out
     assert "Warning" in captured
@@ -88,9 +84,9 @@ def test_dry_run_status_and_warning(monkeypatch, capsys):
 
 
 def test_progress_bar_suppression(monkeypatch, capsys):
-    from train_pong_ppo import _progress_bar_checked
-    monkeypatch.setattr("train_pong_ppo._progress_bar_checked", False)
-    monkeypatch.setattr("train_pong_ppo._progress_bar_available", False)
+    from train import _progress_bar_checked
+    monkeypatch.setattr("train._progress_bar_checked", False)
+    monkeypatch.setattr("train._progress_bar_available", False)
     out = _progress_bar_ready(suppress_log=True)
     assert isinstance(out, bool)
     assert capsys.readouterr().out == ""
@@ -114,7 +110,7 @@ def test_train_single_smoke(tmp_path):
         video_dir=str(tmp_path / "videos"),
         metrics_csv=str(tmp_path / "logs" / "metrics.csv"),
     )
-    model_id, metrics, timestamp, latest_path, stamped = _train_single("smoke_model", (200, 0, 0), cfg, seed=123)
+    model_id, metrics, timestamp, latest_path, stamped = _train_single("smoke_model", "pong", cfg, seed=123)
     assert model_id == "smoke_model"
     assert "avg_reward" in metrics
     assert Path(latest_path).exists()

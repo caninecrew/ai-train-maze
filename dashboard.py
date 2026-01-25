@@ -8,11 +8,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, parse_qs
 
-import numpy as np
-from stable_baselines3 import PPO
-
-from train_pong_ppo import SB3PongEnv
-from pong import simple_tracking_policy
+from games.registry import get_game
 
 
 ROOT = Path(__file__).resolve().parent
@@ -37,6 +33,7 @@ _TB_SUFFIXES = (
     "/win_rate",
     "/avg_return_rate",
     "/avg_rally_length",
+    "/avg_ep_len",
 )
 
 
@@ -85,6 +82,15 @@ def _latest_report_info(log_dir: Path) -> Dict[str, Any]:
         return {}
 
 
+def _resolve_game_context(log_dir: Path) -> Dict[str, str]:
+    report = _latest_report_info(log_dir)
+    config = report.get("config", {})
+    summary = report.get("summary", {})
+    game = config.get("game") or summary.get("game") or "pong"
+    model_prefix = summary.get("model_prefix") or config.get("model_prefix") or ""
+    return {"game": game, "model_prefix": model_prefix}
+
+
 def _sanitize_json(value: Any) -> Any:
     if isinstance(value, float):
         return value if math.isfinite(value) else None
@@ -117,55 +123,21 @@ def _list_reports(log_dir: Path) -> List[Dict[str, Any]]:
     return items
 
 
-def _heatmap_from_model(model_path: Path, steps: int = 1500, bins: int = 40) -> dict:
+def _heatmap_from_model(game_name: str, model_path: Path, steps: int = 1500, bins: int = 40) -> dict:
     global _HEATMAP_CACHE, _HEATMAP_TS
     now = time.time()
     if _HEATMAP_CACHE is not None and (now - _HEATMAP_TS) < 10:
         return _HEATMAP_CACHE
     if not model_path.exists():
         return {}
-    env = SB3PongEnv(opponent_policy=simple_tracking_policy, render_mode=None)
     try:
-        model = PPO.load(str(model_path), env=env, device="cpu")
-        obs, _ = env.reset()
-        heat_ball = np.zeros((bins, bins), dtype=np.int32)
-        heat_left = np.zeros((bins, bins), dtype=np.int32)
-        heat_right = np.zeros((bins, bins), dtype=np.int32)
-        heat_hits = np.zeros((bins, bins), dtype=np.int32)
-        heat_scores = np.zeros((bins, bins), dtype=np.int32)
-        last_left = 0
-        last_right = 0
-        for _ in range(steps):
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = env.step(action)
-            bx, by = obs[0], obs[1]
-            ly, ry = obs[4], obs[5]
-            x = min(bins - 1, max(0, int(bx * bins)))
-            y = min(bins - 1, max(0, int(by * bins)))
-            heat_ball[y, x] += 1
-            ly_idx = min(bins - 1, max(0, int(ly * bins)))
-            ry_idx = min(bins - 1, max(0, int(ry * bins)))
-            heat_left[ly_idx, 1] += 1
-            heat_right[ry_idx, bins - 2] += 1
-            if reward > 0 and reward < 0.5:
-                heat_hits[y, x] += 1
-            left_score = info.get("left_score", last_left)
-            right_score = info.get("right_score", last_right)
-            if left_score != last_left or right_score != last_right:
-                heat_scores[y, x] += 1
-                last_left, last_right = left_score, right_score
-            if terminated or truncated:
-                obs, _ = env.reset()
-        _HEATMAP_CACHE = {
-            "ball": heat_ball.tolist(),
-            "paddles": (heat_left + heat_right).tolist(),
-            "hits": heat_hits.tolist(),
-            "scores": heat_scores.tolist(),
-        }
-        _HEATMAP_TS = now
-        return _HEATMAP_CACHE
-    finally:
-        env.close()
+        game = get_game(game_name)
+    except KeyError:
+        return {}
+    heat = game.heatmap_from_model(str(model_path), steps=steps, bins=bins)
+    _HEATMAP_CACHE = heat or {}
+    _HEATMAP_TS = now
+    return _HEATMAP_CACHE
 
 
 def _tensorboard_available() -> bool:
@@ -258,9 +230,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             last_update = None
             if metrics_csv.exists():
                 last_update = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(metrics_csv.stat().st_mtime))
+            game_context = _resolve_game_context(log_dir)
             payload = {
                 "metrics": metrics,
                 "report": report,
+                "game": game_context,
                 "paths": {
                     "metrics_csv": str(metrics_csv),
                     "latest_report": str(report_path) if report_path else "",
@@ -278,19 +252,33 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     reader = csv.DictReader(fh)
                     for row in reader:
                         try:
+                            def _safe_float(value):
+                                if value in (None, "", "nan"):
+                                    return None
+                                try:
+                                    return float(value)
+                                except Exception:
+                                    return None
+
+                            avg_ep_len = _safe_float(row.get("avg_ep_len"))
+                            if avg_ep_len is None:
+                                avg_ep_len = _safe_float(row.get("avg_rally_length"))
                             series.append(
                                 {
                                     "cycle": int(row.get("cycle", 0)),
                                     "model_id": row.get("model_id", ""),
-                                    "avg_reward": float(row.get("avg_reward", 0.0)),
-                                    "avg_reward_ci": float(row.get("avg_reward_ci", 0.0)),
-                                    "win_rate": float(row.get("win_rate", 0.0)),
-                                    "avg_rally_length": float(row.get("avg_rally_length", 0.0)),
-                                    "avg_return_rate": float(row.get("avg_return_rate", 0.0)),
-                                    "avg_return_rate_ci": float(row.get("avg_return_rate_ci", 0.0)),
-                                    "delta_reward": float(row.get("delta_reward", 0.0)) if row.get("delta_reward") else 0.0,
+                                    "avg_reward": _safe_float(row.get("avg_reward")),
+                                    "avg_reward_ci": _safe_float(row.get("avg_reward_ci")),
+                                    "avg_ep_len": avg_ep_len,
+                                    "avg_ep_len_ci": _safe_float(row.get("avg_ep_len_ci")),
+                                    "win_rate": _safe_float(row.get("win_rate")),
+                                    "avg_rally_length": _safe_float(row.get("avg_rally_length")),
+                                    "avg_return_rate": _safe_float(row.get("avg_return_rate")),
+                                    "avg_return_rate_ci": _safe_float(row.get("avg_return_rate_ci")),
+                                    "delta_reward": _safe_float(row.get("delta_reward")),
                                     "timestamp": row.get("timestamp", ""),
                                     "run_id": row.get("run_timestamp", ""),
+                                    "game": row.get("game", ""),
                                 }
                             )
                         except Exception:
@@ -322,12 +310,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(payload).encode("utf-8"), "application/json")
             return
         if parsed.path == "/api/heatmap":
-            model_path = ROOT / "models" / "ppo_pong_custom_latest.zip"
+            log_dir = ROOT / "logs"
+            game_context = _resolve_game_context(log_dir)
+            game_name = game_context.get("game", "pong")
+            model_prefix = game_context.get("model_prefix")
+            model_path = ROOT / "models" / f"{model_prefix}_latest.zip" if model_prefix else ROOT / "models" / "latest.zip"
             best = _read_metrics(ROOT / "logs" / "metrics.csv")
             if best and best.get("model_id"):
                 model_path = ROOT / "models" / f"{best['model_id']}_latest.zip"
             try:
-                heat = _heatmap_from_model(model_path)
+                heat = _heatmap_from_model(game_name, model_path)
                 self._send(200, json.dumps({"heatmap": heat}).encode("utf-8"), "application/json")
             except Exception as exc:
                 self._send(200, json.dumps({"heatmap": [], "error": str(exc)}).encode("utf-8"), "application/json")
@@ -389,7 +381,7 @@ def _dashboard_html() -> str:
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Pong Trainer Dashboard</title>
+  <title>Training Dashboard</title>
   <style>
     :root {
       --bg: #0b0f14;
@@ -459,9 +451,9 @@ def _dashboard_html() -> str:
         <div class="label" id="freshnessLine">Last update: --</div>
       </div>
     <div class="wrap">
-      <h1>Live Pong Training Dashboard</h1>
+      <h1>Live Training Dashboard</h1>
       <div class="tiny" style="margin-bottom:12px;">
-        This page tracks how the AI is learning to play Pong. Each "cycle" is one round of training and testing.
+        This page tracks how the AI is learning. Each "cycle" is one round of training and testing.
         If a number is bigger, that usually means better play (unless noted).
       </div>
       <div id="panel-overview" class="panel active">
@@ -493,13 +485,13 @@ def _dashboard_html() -> str:
             <div class="tiny">How often the AI hits the ball back.</div>
             <div class="tiny">1.00 = returns every shot, 0.00 = misses every shot.</div>
           </div>
-          <div class="card">
-            <div class="label">Rally Length</div>
-            <div id="kpiRally" class="stat">--</div>
-            <div class="tiny" id="kpiRallyDelta">--</div>
-            <div class="tiny">Average number of hits before a point ends.</div>
-            <div class="tiny">Longer rallies usually mean better defense.</div>
-          </div>
+            <div class="card">
+              <div class="label">Episode Length</div>
+              <div id="kpiRally" class="stat">--</div>
+              <div class="tiny" id="kpiRallyDelta">--</div>
+              <div class="tiny">Average episode length (steps).</div>
+              <div class="tiny">Longer episodes usually mean more sustained play.</div>
+            </div>
         </div>
         <div class="grid" style="margin-top:16px;">
           <div class="card">
@@ -584,7 +576,7 @@ def _dashboard_html() -> str:
               <canvas id="chartDelta" width="500" height="200"></canvas>
             </div>
             <div>
-              <div class="label">Avg Rally Length (per cycle)</div>
+              <div class="label">Avg Episode Length (per cycle)</div>
               <canvas id="chartRally" width="500" height="200"></canvas>
             </div>
           </div>
@@ -603,7 +595,7 @@ def _dashboard_html() -> str:
                 <canvas id="histReward" width="400" height="200"></canvas>
               </div>
               <div>
-                <div class="label">Rally Length Histogram</div>
+                <div class="label">Episode Length Histogram</div>
                 <canvas id="histRally" width="400" height="200"></canvas>
               </div>
             </div>
@@ -614,7 +606,7 @@ def _dashboard_html() -> str:
             <div class="tiny">Upward trend = that metric helps the reward.</div>
             <div class="split">
               <div>
-                <div class="label">Reward vs Rally Length</div>
+                <div class="label">Reward vs Episode Length</div>
                 <canvas id="scatterRally" width="400" height="200"></canvas>
               </div>
               <div>
@@ -746,7 +738,7 @@ def _dashboard_html() -> str:
                 <th>Avg Reward</th>
                 <th>Delta</th>
                 <th>Win Rate</th>
-                <th>Rally</th>
+                  <th>Episode Len</th>
                 <th>Return</th>
               </tr>
             </thead>
@@ -787,11 +779,13 @@ async function refreshStatus() {
   try {
     const res = await apiFetch('/api/status');
     const data = await res.json();
-    const metrics = data.metrics || {};
-    const report = (data.report || {}).summary || {};
-    document.getElementById('bestModel').textContent = metrics.model_id || 'n/a';
-    document.getElementById('bestReward').textContent = metrics.avg_reward || '--';
-    document.getElementById('bestWin').textContent = metrics.win_rate || '--';
+      const metrics = data.metrics || {};
+      const report = (data.report || {}).summary || {};
+      const winRate = (metrics.win_rate === null || metrics.win_rate === undefined || metrics.win_rate === '') ? '--' : metrics.win_rate;
+      const avgReward = (metrics.avg_reward === null || metrics.avg_reward === undefined || metrics.avg_reward === '') ? '--' : metrics.avg_reward;
+      document.getElementById('bestModel').textContent = metrics.model_id || 'n/a';
+      document.getElementById('bestReward').textContent = avgReward;
+      document.getElementById('bestWin').textContent = winRate;
     document.getElementById('runId').textContent = report.run_timestamp || '--';
     document.getElementById('stopReason').textContent = report.stop_reason || '--';
     const sources = data.paths || {};
@@ -988,9 +982,11 @@ async function refreshCharts() {
   const table = document.getElementById('metricsTable');
   table.innerHTML = '';
   const recent = series.slice(-15).reverse();
+  const fmtCell = (value, digits = 2) => (value === null || value === undefined ? '--' : value.toFixed(digits));
   for (const row of recent) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${row.avg_reward.toFixed(2)}</td><td>${row.delta_reward.toFixed(2)}</td><td>${row.win_rate.toFixed(2)}</td><td>${row.avg_rally_length.toFixed(1)}</td><td>${row.avg_return_rate.toFixed(2)}</td>`;
+    const epLen = row.avg_ep_len ?? row.avg_rally_length;
+    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td><td>${fmtCell(row.win_rate, 2)}</td><td>${fmtCell(epLen, 1)}</td><td>${fmtCell(row.avg_return_rate, 2)}</td>`;
     table.appendChild(tr);
   }
   const byCycle = new Map();
@@ -1002,36 +998,59 @@ async function refreshCharts() {
   const cycles = Array.from(byCycle.keys()).sort((a,b)=>a-b);
   if (cycles.length === 1) {
     const rows = byCycle.get(cycles[0]);
-    const rewardVals = rows.map(r => r.avg_reward);
-    const winVals = rows.map(r => r.win_rate);
-    const deltaVals = rows.map(r => r.delta_reward);
-    const rallyVals = rows.map(r => r.avg_rally_length);
+      const rewardVals = rows.map(r => r.avg_reward);
+      const winVals = rows.map(r => r.win_rate);
+      const deltaVals = rows.map(r => r.delta_reward);
+      const rallyVals = rows.map(r => r.avg_ep_len ?? r.avg_rally_length);
     const minMaxAvg = (vals) => {
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
-      const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+      const cleaned = vals.filter(v => v !== null && v !== undefined);
+      if (!cleaned.length) return null;
+      const min = Math.min(...cleaned);
+      const max = Math.max(...cleaned);
+      const avg = cleaned.reduce((a,b)=>a+b,0) / cleaned.length;
       return {min, max, avg};
     };
     const rewardStats = minMaxAvg(rewardVals);
     const winStats = minMaxAvg(winVals);
     const deltaStats = minMaxAvg(deltaVals);
     const rallyStats = minMaxAvg(rallyVals);
-    drawRangeChart(document.getElementById('chartReward'), rewardStats, '#14f195', 'Avg Reward (single cycle)');
-    drawRangeChart(document.getElementById('chartWin'), winStats, '#f5a623', 'Win Rate (single cycle)', 0, 1);
-    drawRangeChart(document.getElementById('chartDelta'), deltaStats, '#7cc6ff', 'Delta Reward (single cycle)');
-    drawRangeChart(document.getElementById('chartRally'), rallyStats, '#ff5f7a', 'Avg Rally Length (single cycle)');
+    if (rewardStats) {
+      drawRangeChart(document.getElementById('chartReward'), rewardStats, '#14f195', 'Avg Reward (single cycle)');
+    } else {
+      drawEmpty(document.getElementById('chartReward'), 'No reward data');
+    }
+    if (winStats) {
+      drawRangeChart(document.getElementById('chartWin'), winStats, '#f5a623', 'Win Rate (single cycle)', 0, 1);
+    } else {
+      drawEmpty(document.getElementById('chartWin'), 'No win data');
+    }
+    if (deltaStats) {
+      drawRangeChart(document.getElementById('chartDelta'), deltaStats, '#7cc6ff', 'Delta Reward (single cycle)');
+    } else {
+      drawEmpty(document.getElementById('chartDelta'), 'No delta data');
+    }
+    if (rallyStats) {
+      drawRangeChart(document.getElementById('chartRally'), rallyStats, '#ff5f7a', 'Avg Episode Length (single cycle)');
+    } else {
+      drawEmpty(document.getElementById('chartRally'), 'No episode length data');
+    }
     return;
   }
   const pickByMode = (rows, key) => {
+    const vals = rows.map(r => {
+      if (key === 'avg_ep_len') return r.avg_ep_len ?? r.avg_rally_length;
+      return r[key];
+    }).filter(v => v !== null && v !== undefined);
+    if (!vals.length) return null;
     if (compareMode === 'best') {
-      return rows.reduce((acc, r) => Math.max(acc, r[key]), -999);
+      return vals.reduce((acc, v) => Math.max(acc, v), -999);
     }
     if (compareMode === 'median') {
-      const vals = rows.map(r => r[key]).sort((a,b)=>a-b);
-      const mid = Math.floor(vals.length / 2);
-      return vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
+      const sorted = vals.slice().sort((a,b)=>a-b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
     }
-    return rows.reduce((acc, r) => acc + r[key], 0) / rows.length;
+    return vals.reduce((acc, v) => acc + v, 0) / vals.length;
   };
   const applyRolling = (vals) => {
     if (!rollingEnabled) return vals;
@@ -1045,7 +1064,7 @@ async function refreshCharts() {
   const rewards = applyRolling(cycles.map(c => pickByMode(byCycle.get(c), 'avg_reward')));
   const wins = applyRolling(cycles.map(c => pickByMode(byCycle.get(c), 'win_rate')));
   const deltas = applyRolling(cycles.map(c => pickByMode(byCycle.get(c), 'delta_reward')));
-  const rallies = applyRolling(cycles.map(c => pickByMode(byCycle.get(c), 'avg_rally_length')));
+  const rallies = applyRolling(cycles.map(c => pickByMode(byCycle.get(c), 'avg_ep_len')));
   drawLineChart(document.getElementById('chartReward'), cycles, [
     { label: compareMode, color: '#14f195', values: rewards },
   ], 'Avg Reward');
@@ -1057,7 +1076,7 @@ async function refreshCharts() {
   ], 'Delta Reward');
   drawLineChart(document.getElementById('chartRally'), cycles, [
     { label: compareMode, color: '#ff5f7a', values: rallies },
-  ], 'Avg Rally Length');
+  ], 'Avg Episode Length');
     drawDistributions(byCycle);
     drawCorrelations(series);
     updateLeaderboard(series);
@@ -1076,7 +1095,11 @@ function drawLineChart(canvas, xs, series, title) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
   if (!xs.length) return;
-  const allValues = series.flatMap(s => s.values);
+  const allValues = series.flatMap(s => s.values).filter(v => v !== null && v !== undefined);
+  if (!allValues.length) {
+    drawEmpty(canvas, 'No data');
+    return;
+  }
   const minY = Math.min(...allValues);
   const maxY = Math.max(...allValues);
   const pad = 28;
@@ -1206,29 +1229,36 @@ function updateKpis(series) {
   const cycles = Array.from(byCycle.keys()).sort((a,b)=>a-b);
   const latest = byCycle.get(cycles[cycles.length - 1]) || [];
   const prev = cycles.length > 1 ? (byCycle.get(cycles[cycles.length - 2]) || []) : [];
-  const bestReward = Math.max(...latest.map(r => r.avg_reward));
-  const bestRewardCi = latest.find(r => r.avg_reward === bestReward)?.avg_reward_ci || 0;
-  const avgReward = latest.reduce((a,b)=>a+b.avg_reward,0) / latest.length;
-  const avgWin = latest.reduce((a,b)=>a+b.win_rate,0) / latest.length;
-  const avgReturn = latest.reduce((a,b)=>a+b.avg_return_rate,0) / latest.length;
-  const avgReturnCi = latest.reduce((a,b)=>a+b.avg_return_rate_ci,0) / latest.length;
-  const avgRally = latest.reduce((a,b)=>a+b.avg_rally_length,0) / latest.length;
-  const prevAvgReward = prev.length ? prev.reduce((a,b)=>a+b.avg_reward,0) / prev.length : avgReward;
-  const prevAvgWin = prev.length ? prev.reduce((a,b)=>a+b.win_rate,0) / prev.length : avgWin;
-  const prevAvgRally = prev.length ? prev.reduce((a,b)=>a+b.avg_rally_length,0) / prev.length : avgRally;
-  const deltaReward = avgReward - prevAvgReward;
-  const deltaWin = avgWin - prevAvgWin;
-  const deltaRally = avgRally - prevAvgRally;
+  const avgOfRows = (rows, key) => {
+    const vals = rows.map(r => r[key]).filter(v => v !== null && v !== undefined);
+    if (!vals.length) return null;
+    return vals.reduce((a,b)=>a+b,0) / vals.length;
+  };
+  const rewardVals = latest.map(r => r.avg_reward).filter(v => v !== null && v !== undefined);
+  if (!rewardVals.length) return;
+  const bestReward = Math.max(...rewardVals);
+  const bestRewardCi = (latest.find(r => r.avg_reward === bestReward)?.avg_reward_ci) ?? null;
+  const avgReward = avgOfRows(latest, 'avg_reward');
+  const avgWin = avgOfRows(latest, 'win_rate');
+  const avgReturn = avgOfRows(latest, 'avg_return_rate');
+  const avgReturnCi = avgOfRows(latest, 'avg_return_rate_ci');
+  const avgEpLen = avgOfRows(latest, 'avg_ep_len');
+  const prevAvgReward = avgOfRows(prev, 'avg_reward') ?? avgReward;
+  const prevAvgWin = avgOfRows(prev, 'win_rate') ?? avgWin;
+  const prevAvgLen = avgOfRows(prev, 'avg_ep_len') ?? avgEpLen;
+  const deltaReward = (avgReward ?? 0) - (prevAvgReward ?? 0);
+  const deltaWin = (avgWin ?? 0) - (prevAvgWin ?? 0);
+  const deltaLen = (avgEpLen ?? 0) - (prevAvgLen ?? 0);
   document.getElementById('kpiBestReward').textContent = bestReward.toFixed(2);
-  document.getElementById('kpiBestRewardCi').textContent = `CI +/-${bestRewardCi.toFixed(2)}`;
-  document.getElementById('kpiAvgReward').textContent = avgReward.toFixed(2);
+  document.getElementById('kpiBestRewardCi').textContent = bestRewardCi !== null ? `CI +/-${bestRewardCi.toFixed(2)}` : 'CI --';
+  document.getElementById('kpiAvgReward').textContent = avgReward !== null ? avgReward.toFixed(2) : '--';
   document.getElementById('kpiAvgRewardDelta').textContent = `Delta ${deltaReward.toFixed(2)} vs last cycle`;
-  document.getElementById('kpiWinRate').textContent = avgWin.toFixed(2);
+  document.getElementById('kpiWinRate').textContent = avgWin !== null ? avgWin.toFixed(2) : '--';
   document.getElementById('kpiWinRateDelta').textContent = `Delta ${deltaWin.toFixed(2)} vs last cycle`;
-  document.getElementById('kpiReturnRate').textContent = avgReturn.toFixed(2);
-  document.getElementById('kpiReturnRateCi').textContent = `CI +/-${avgReturnCi.toFixed(2)}`;
-  document.getElementById('kpiRally').textContent = avgRally.toFixed(1);
-  document.getElementById('kpiRallyDelta').textContent = `Delta ${deltaRally.toFixed(1)} vs last cycle`;
+  document.getElementById('kpiReturnRate').textContent = avgReturn !== null ? avgReturn.toFixed(2) : '--';
+  document.getElementById('kpiReturnRateCi').textContent = avgReturnCi !== null ? `CI +/-${avgReturnCi.toFixed(2)}` : 'CI --';
+  document.getElementById('kpiRally').textContent = avgEpLen !== null ? avgEpLen.toFixed(1) : '--';
+  document.getElementById('kpiRallyDelta').textContent = `Delta ${deltaLen.toFixed(1)} vs last cycle`;
 }
 
 function updateCycleSelectors(byCycle) {
@@ -1252,7 +1282,8 @@ function drawDistributions(byCycle) {
   const cycle = parseInt(cycleSelect.value, 10);
   const rows = byCycle.get(cycle) || [];
   drawHistogram(document.getElementById('histReward'), rows.map(r => r.avg_reward), '#14f195', 'Reward');
-  drawHistogram(document.getElementById('histRally'), rows.map(r => r.avg_rally_length), '#ff5f7a', 'Rally');
+  const lenVals = rows.map(r => r.avg_ep_len ?? r.avg_rally_length).filter(v => v !== null && v !== undefined);
+  drawHistogram(document.getElementById('histRally'), lenVals, '#ff5f7a', 'Episode Length');
 }
 
 function drawHistogram(canvas, values, color, title) {
@@ -1289,7 +1320,10 @@ function drawHistogram(canvas, values, color, title) {
 }
 
 function drawCorrelations(series) {
-  drawScatter(document.getElementById('scatterRally'), series.map(r => [r.avg_rally_length, r.avg_reward]), '#ff5f7a', 'Rally', 'Reward');
+  const lenPoints = series
+    .map(r => [r.avg_ep_len ?? r.avg_rally_length, r.avg_reward])
+    .filter(p => p[0] !== null && p[0] !== undefined && p[1] !== null && p[1] !== undefined);
+  drawScatter(document.getElementById('scatterRally'), lenPoints, '#ff5f7a', 'Episode Length', 'Reward');
   drawScatter(document.getElementById('scatterReturn'), series.map(r => [r.avg_return_rate, r.avg_reward]), '#2aa4ff', 'Return', 'Reward');
 }
 
@@ -1493,7 +1527,7 @@ function renderCohortTable() {
     ['Avg Reward', rewardA, rewardB],
     ['Win Rate', avgOf(seriesA, 'win_rate'), avgOf(seriesB, 'win_rate')],
     ['Return Rate', avgOf(seriesA, 'avg_return_rate'), avgOf(seriesB, 'avg_return_rate')],
-    ['Rally Length', avgOf(seriesA, 'avg_rally_length'), avgOf(seriesB, 'avg_rally_length')],
+    ['Episode Length', avgOf(seriesA, 'avg_ep_len'), avgOf(seriesB, 'avg_ep_len')],
   ];
   const tbody = document.getElementById('cohortTable');
   tbody.innerHTML = '';
@@ -1506,7 +1540,9 @@ function renderCohortTable() {
 
 function avgOf(series, key) {
   if (!series.length) return null;
-  return series.reduce((a,b)=>a+b[key],0) / series.length;
+  const vals = series.map(r => r[key]).filter(v => v !== null && v !== undefined);
+  if (!vals.length) return null;
+  return vals.reduce((a,b)=>a+b,0) / vals.length;
 }
 
 function avgRewardFromReport(runId) {
@@ -1567,9 +1603,13 @@ function updateVideoInsights(series) {
     target.textContent = 'No rally insights yet.';
     return;
   }
-  const top = [...series].sort((a,b)=>b.avg_rally_length - a.avg_rally_length).slice(0,5);
+  const withLen = [...series].map(row => ({
+    ...row,
+    epLen: row.avg_ep_len ?? row.avg_rally_length,
+  })).filter(row => row.epLen !== null && row.epLen !== undefined);
+  const top = withLen.sort((a,b)=>b.epLen - a.epLen).slice(0,5);
   target.innerHTML = top.map(row => (
-    `Cycle ${row.cycle} ${row.model_id}: rally ${row.avg_rally_length.toFixed(1)} @ ${row.timestamp} ` +
+    `Cycle ${row.cycle} ${row.model_id}: episode len ${row.epLen.toFixed(1)} @ ${row.timestamp} ` +
     `<button class="pill" data-jump="1">Jump video</button>`
   )).join('<br/>');
   target.querySelectorAll('button[data-jump]').forEach(btn => {
@@ -1644,7 +1684,7 @@ initSnapshotOptions();
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the Pong training dashboard server.")
+    parser = argparse.ArgumentParser(description="Run the training dashboard server.")
     parser.add_argument("--port", type=int, default=8000, help="Port to serve on.")
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), DashboardHandler)

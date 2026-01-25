@@ -1,0 +1,25 @@
+defaults:
+  game: pong
+  train_timesteps: 300000
+  n_steps: 256
+  batch_size: 512
+  n_epochs: 4
+  n_envs: 8
+  eval_episodes: 3
+  video_steps: 600
+  max_video_seconds: 30
+profiles:
+  quick:
+    train_timesteps: 10000
+    iterations_per_set: 1
+    max_cycles: 1
+    eval_episodes: 1
+    video_steps: 300
+    max_video_seconds: 20
+    checkpoint_interval: 0
+    no_checkpoint: true
+  gpu:
+    device: cuda
+    batch_size: 1024
+    n_envs: 16
+    train_timesteps: 500000

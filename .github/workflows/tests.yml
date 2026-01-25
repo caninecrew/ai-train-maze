@@ -43,7 +43,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           mkdir -p videos models logs
-          python train_pong_ppo.py --max-cycles 1
+          python train.py --game pong --max-cycles 1
 
       - name: Commit test outputs
         if: github.event_name != 'pull_request'
