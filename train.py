@@ -70,13 +70,13 @@ def _add_overlay(frame: np.ndarray, text: str, footer: str = "") -> np.ndarray:
         return frame
     img = Image.fromarray(frame)
     drawer = ImageDraw.Draw(img)
-    if text:
-        drawer.rectangle([(0, 0), (img.width, 26)], fill=(0, 0, 0))
-        drawer.text((6, 6), text, fill=(255, 255, 255))
+    combined = text
     if footer:
+        combined = f"{text} | {footer}" if text else footer
+    if combined:
         y0 = img.height - 24
         drawer.rectangle([(0, y0), (img.width, img.height)], fill=(0, 0, 0))
-        drawer.text((6, y0 + 4), footer, fill=(255, 255, 255))
+        drawer.text((6, y0 + 4), combined, fill=(255, 255, 255))
     return np.array(img)
 
 
