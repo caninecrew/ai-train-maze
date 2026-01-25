@@ -219,15 +219,21 @@ def render_grid_frame(
     draw.ellipse((gx0 + pad, gy0 + pad, gx1 - pad, gy1 - pad), fill=goal_color)
 
     ar, ac = agent_pos
-    ax = (ac) * cell
-    ay = (ar) * cell
-    radius = max(3, int(cell * 0.45))
+    ax = float(ac * cell)
+    ay = float(ar * cell)
+    ax = min(max(ax, 0.0), img.width - 1.0)
+    ay = min(max(ay, 0.0), img.height - 1.0)
+    radius = max(4, int(cell * 0.5))
     draw.ellipse(
         (ax - radius, ay - radius, ax + radius, ay + radius),
         fill=agent_color,
-        outline=(0, 0, 0),
-        width=max(1, radius // 4),
+        outline=(255, 255, 255),
+        width=max(1, radius // 3),
     )
+    # Draw a high-contrast crosshair to guarantee visibility.
+    cross = max(3, radius // 2)
+    draw.line((ax - cross, ay, ax + cross, ay), fill=(255, 255, 255), width=2)
+    draw.line((ax, ay - cross, ax, ay + cross), fill=(255, 255, 255), width=2)
     return np.array(img)
 
 
