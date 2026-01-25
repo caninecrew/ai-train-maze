@@ -21,7 +21,7 @@ Best practices and naming convention:
 - See `docs/maze_best_practices.md` for the full pipeline, thresholds, and scaling guidance.
 - Maze IDs use `maze_###` (e.g., `maze_001`) and stay consistent across assets/data/outputs.
 - Optional per-maze config can live at `assets/mazes/maze_###.json` (rows/cols, thresholds).
-- GitHub Actions: run `maze-convert-and-train` to convert the latest maze and train.
+- GitHub Actions: run `maze-convert-and-train` manually to convert the latest maze and train; adjust `max_cycles` and `train_args` as needed.
 
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.

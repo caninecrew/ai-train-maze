@@ -22,17 +22,11 @@ on:
       max_cycles:
         description: "Training cycles"
         required: false
-        default: "1"
-  push:
-    paths:
-      - "assets/mazes/*.png"
-      - "assets/mazes/*.json"
-      - "scripts/mazes/convert_png_to_grid.py"
-      - "configs/**"
-      - "games/**"
-      - "train.py"
-      - "requirements.txt"
-
+        default: "5"
+      train_args:
+        description: "Extra train.py args (optional)"
+        required: false
+        default: ""
 jobs:
   convert_and_train:
     runs-on: ubuntu-latest
@@ -109,7 +103,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           mkdir -p videos models logs
-          python train.py --game "${{ inputs.train_game }}" --max-cycles "${{ inputs.max_cycles }}"
+          python train.py --game "${{ inputs.train_game }}" --max-cycles "${{ inputs.max_cycles }}" ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'

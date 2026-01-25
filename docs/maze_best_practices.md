@@ -82,8 +82,9 @@ Converter location:
 
 GitHub Actions automation:
 - The `maze-convert-and-train` workflow runs conversion and training.
-- You can start it manually via workflow dispatch, or let it run on relevant pushes.
+- You start it manually via workflow dispatch to keep outputs intentional.
 - It converts the most recent maze by default, or uses the `maze_id` input when provided.
+- Use `max_cycles` to control training length and `train_args` for extra flags.
 - Optional per-maze settings live in `assets/mazes/maze_###.json` (e.g., rows/cols, threshold).
 
 ## Scalability strategy
