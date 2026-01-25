@@ -31,6 +31,10 @@ on:
         description: "Parallel model lines per cycle"
         required: false
         default: "1"
+      max_steps:
+        description: "Max steps per episode (maze env)"
+        required: false
+        default: "3600"
   push:
     paths:
       - "assets/mazes/*.png"
@@ -120,6 +124,7 @@ jobs:
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
+          MAZE_MAX_STEPS: ${{ inputs.max_steps }}
         run: |
           mkdir -p videos models logs
           max_cycles="${{ inputs.max_cycles }}"

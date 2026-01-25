@@ -56,7 +56,14 @@ class MazeEnv(gym.Env):
         self._maze_id = paths["maze_id"]
         self._grid = np.load(paths["grid"])
         self._rows, self._cols = self._grid.shape
-        self._max_steps = int(self._rows * self._cols * 2)
+        max_steps_env = os.getenv("MAZE_MAX_STEPS", "").strip()
+        if max_steps_env:
+            try:
+                self._max_steps = max(1, int(max_steps_env))
+            except ValueError:
+                self._max_steps = int(self._rows * self._cols)
+        else:
+            self._max_steps = int(self._rows * self._cols)
         self._step_count = 0
         self._wall_penalty = -500.0
 
