@@ -14,6 +14,18 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
+If you see `No module named pip`, install Python tooling first:
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-venv python3-pip
+```
+Then recreate the venv:
+```bash
+rm -rf .venv
+/usr/bin/python3 -m venv .venv
+source .venv/bin/activate
+```
+
 ## 3) Install dependencies
 ```bash
 python3 -m pip install -r requirements.txt
