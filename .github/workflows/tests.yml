@@ -56,7 +56,25 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add videos/ models/ logs/ || true
+          if [ -d models ]; then
+            latest_model="$(ls -t models/*.zip 2>/dev/null | head -n 1)"
+            if [ -n "$latest_model" ]; then
+              ls -t models/*.zip | tail -n +2 | xargs -r rm -f
+              git add -f "$latest_model"
+              git add -f models/.gitkeep || true
+            fi
+          fi
+          if [ -d videos ]; then
+            latest_video="$(ls -t videos/*.mp4 2>/dev/null | head -n 1)"
+            if [ -n "$latest_video" ]; then
+              ls -t videos/*.mp4 | tail -n +2 | xargs -r rm -f
+              git add -f "$latest_video"
+              git add -f videos/.gitkeep || true
+            fi
+          fi
+          if [ -d logs ]; then
+            git add -f logs/ || true
+          fi
           if git diff --cached --quiet; then
             echo "No test outputs to commit."
             exit 0
