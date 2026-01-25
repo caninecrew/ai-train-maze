@@ -85,7 +85,7 @@ GitHub Actions automation:
 - You start it manually via workflow dispatch to keep outputs intentional.
 - It converts the most recent maze by default, or uses the `maze_id` input when provided.
 - Use `max_cycles` to control training length and `train_args` for extra flags.
-- Optional per-maze settings live in `assets/mazes/maze_###.json` (e.g., rows/cols, threshold).
+- Optional per-maze settings live in `assets/mazes/maze_###.json` (e.g., rows/cols, threshold, wall_ratio).
 - Set `MAZE_ID` in your environment to train a specific maze locally.
 
 ## Scalability strategy

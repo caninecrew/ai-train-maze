@@ -1,4 +1,5 @@
 {
   "rows": 60,
-  "cols": 60
+  "cols": 60,
+  "wall_ratio": 0.05
 }

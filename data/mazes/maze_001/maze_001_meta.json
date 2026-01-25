@@ -4,6 +4,7 @@
   "cols": 60,
   "threshold": -1,
   "open_ratio": 0.55,
+  "wall_ratio": 0.05,
   "method": "patch",
   "invert": false,
   "auto_invert": true,

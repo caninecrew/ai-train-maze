@@ -109,6 +109,7 @@ def png_to_grid_patchvote(
     cols: int,
     threshold: int = 128,
     open_ratio: float = 0.55,
+    wall_ratio: float = -1.0,
     invert: bool = False,
     auto_invert: bool = True,
     trim: bool = True,
@@ -155,7 +156,11 @@ def png_to_grid_patchvote(
                 continue
 
             white_frac = (patch == 255).mean()
-            grid[r, c] = 0 if white_frac >= open_ratio else 1
+            if wall_ratio >= 0:
+                black_frac = 1.0 - white_frac
+                grid[r, c] = 1 if black_frac >= wall_ratio else 0
+            else:
+                grid[r, c] = 0 if white_frac >= open_ratio else 1
 
     return grid, trim_bbox
 
@@ -238,6 +243,12 @@ def main() -> None:
         type=float,
         default=0.55,
         help="Fraction of white pixels needed for a cell to be considered open (0-1).",
+    )
+    ap.add_argument(
+        "--wall_ratio",
+        type=float,
+        default=-1.0,
+        help="If >=0, use black pixel fraction for walls (0-1). Overrides open_ratio.",
     )
     ap.add_argument(
         "--method",
@@ -325,6 +336,7 @@ def main() -> None:
             cols=args.cols,
             threshold=args.threshold,
             open_ratio=args.open_ratio,
+            wall_ratio=args.wall_ratio,
             invert=args.invert,
             auto_invert=auto_invert,
             trim=trim,
@@ -347,6 +359,7 @@ def main() -> None:
         "cols": int(args.cols),
         "threshold": int(args.threshold),
         "open_ratio": float(args.open_ratio),
+        "wall_ratio": float(args.wall_ratio),
         "method": args.method,
         "invert": bool(args.invert),
         "auto_invert": bool(auto_invert),
