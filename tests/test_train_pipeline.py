@@ -115,13 +115,9 @@ def test_train_single_smoke(tmp_path):
         video_dir=str(tmp_path / "videos"),
         metrics_csv=str(tmp_path / "logs" / "metrics.csv"),
     )
-    model_id, metrics, segment, ponged, timestamp, latest_path, stamped = _train_single(
-        "smoke_model", (200, 0, 0), cfg, seed=123
-    )
+    model_id, metrics, timestamp, latest_path, stamped = _train_single("smoke_model", (200, 0, 0), cfg, seed=123)
     assert model_id == "smoke_model"
     assert "avg_reward" in metrics
     assert Path(latest_path).exists()
     assert stamped is None  # disabled checkpoints
-    assert isinstance(ponged, bool)
     assert timestamp
-    assert segment  # should have at least one frame

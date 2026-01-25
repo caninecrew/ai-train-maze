@@ -29,12 +29,20 @@ except Exception:  # pragma: no cover - optional dep
 
 
 
+_tensorboard_checked = False
+
+
 def _tensorboard_available() -> bool:
     """Return True if tensorboard is installed; avoid hard dependency at runtime."""
+    global _tensorboard_checked
     try:
         import tensorboard  # type: ignore  # noqa: F401
+        _tensorboard_checked = True
         return True
     except Exception:
+        if not _tensorboard_checked:
+            print("TensorBoard not installed; run `python -m pip install tensorboard` to enable logging.")
+            _tensorboard_checked = True
         return False
 
 
@@ -740,40 +748,48 @@ def main():
         print(f"\n=== Cycle {cycle} / {cfg.max_cycles} ===")
         start_cycle = time.time()
 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=cfg.iterations_per_set) as executor:
-            futures = []
-            seed_by_future: Dict[concurrent.futures.Future, int] = {}
-            for idx, model_id in enumerate(model_ids):
-                color = ball_colors[idx % len(ball_colors)]
-                derived_seed = base_seed + idx + cycle
-                future = executor.submit(
-                    _train_single,
-                    model_id=model_id,
-                    color=color,
-                    cfg=cfg,
-                    seed=derived_seed,
-                )
-                futures.append(future)
-                seed_by_future[future] = derived_seed
+        futures: List[concurrent.futures.Future] = []
+        seed_by_future: Dict[concurrent.futures.Future, int] = {}
+        try:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=cfg.iterations_per_set) as executor:
+                for idx, model_id in enumerate(model_ids):
+                    color = ball_colors[idx % len(ball_colors)]
+                    derived_seed = base_seed + idx + cycle
+                    future = executor.submit(
+                        _train_single,
+                        model_id=model_id,
+                        color=color,
+                        cfg=cfg,
+                        seed=derived_seed,
+                    )
+                    futures.append(future)
+                    seed_by_future[future] = derived_seed
 
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    model_id, metrics, stamp, latest_path, stamped_path = future.result()
-                except Exception as exc:
-                    if cfg.worker_watchdog:
-                        print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
-                        tb = future.exception()
-                        if tb:
-                            print(traceback.format_exc())
-                        continue
-                    raise
-                scores.append((model_id, metrics["avg_reward"]))
-                metrics_list.append((model_id, metrics, latest_path))
-                if stamped_path:
-                    metrics_list[-1] = (model_id, metrics, stamped_path)
-                timestamp = stamp  # use last reported for video naming
-                seed_used = seed_by_future.get(future, base_seed)
-                print(f"[{model_id}] Training done; seed={seed_used}")
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        model_id, metrics, stamp, latest_path, stamped_path = future.result()
+                    except Exception as exc:
+                        if cfg.worker_watchdog:
+                            print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
+                            tb = future.exception()
+                            if tb:
+                                print(traceback.format_exc())
+                            continue
+                        raise
+                    scores.append((model_id, metrics["avg_reward"]))
+                    metrics_list.append((model_id, metrics, latest_path))
+                    if stamped_path:
+                        metrics_list[-1] = (model_id, metrics, stamped_path)
+                    timestamp = stamp  # use last reported for video naming
+                    seed_used = seed_by_future.get(future, base_seed)
+                    print(f"[{model_id}] Training done; seed={seed_used}")
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt received; stopping training and canceling workers.")
+            for future in futures:
+                future.cancel()
+            failure_detected = True
+            stop_reason = "interrupted"
+            break
 
         if cfg.video_steps > 0 and metrics_list:
             for model_id, metrics, model_path in metrics_list:

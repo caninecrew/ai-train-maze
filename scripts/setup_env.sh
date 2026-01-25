@@ -15,6 +15,15 @@ else
   exit 1
 fi
 
+if [ -d "${VENV_DIR}" ] && [ ! -x "${VENV_DIR}/bin/python" ]; then
+  if [ -d "${VENV_DIR}/Scripts" ]; then
+    echo "Existing Windows venv detected; recreating for Linux."
+  else
+    echo "Existing venv missing ${VENV_DIR}/bin/python; recreating."
+  fi
+  rm -rf "${VENV_DIR}"
+fi
+
 if [ ! -d "${VENV_DIR}" ]; then
   "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
