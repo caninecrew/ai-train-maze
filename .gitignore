@@ -20,21 +20,7 @@ Thumbs.db
 .coverage.*
 
 # Training outputs / logs
-logs/
-models/
-runs/
-tensorboard/
-*.tfevents.*
 tmp_logs/
-
-# Saved models (can be large)
-*.zip
-*.pth
-*.pt
-
-# Videos (large)
-videos/
-*.mp4
 
 # Local data
 *.rom

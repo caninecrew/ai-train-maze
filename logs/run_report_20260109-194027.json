@@ -1,0 +1,260 @@
+{
+  "config": {
+    "train_timesteps": 300000,
+    "n_steps": 256,
+    "batch_size": 512,
+    "n_epochs": 4,
+    "gamma": 0.99,
+    "learning_rate": 0.00025,
+    "device": "auto",
+    "target_fps": 30,
+    "max_video_seconds": 30,
+    "video_steps": 600,
+    "max_cycles": 5,
+    "checkpoint_interval": 1,
+    "iterations_per_set": 6,
+    "n_envs": 8,
+    "seed": 0,
+    "deterministic": false,
+    "base_seed": 0,
+    "early_stop_patience": 3,
+    "improvement_threshold": 0.05,
+    "eval_episodes": 3,
+    "eval_video_steps": 0,
+    "long_eval_video_steps": 0,
+    "top_k_checkpoints": 3,
+    "no_checkpoint": false,
+    "individual_videos": false,
+    "cpu_affinity": null,
+    "num_threads": null,
+    "video_dir": "videos",
+    "model_dir": "models",
+    "log_dir": "logs",
+    "metrics_csv": "logs/metrics.csv",
+    "metrics_deltas": true,
+    "stream_tensorboard": false,
+    "status": false,
+    "resume_from": null,
+    "config_path": null,
+    "profile": null,
+    "dry_run": false,
+    "video_resolution": "320x192",
+    "eval_overlay": true,
+    "eval_deterministic": false,
+    "worker_watchdog": true
+  },
+  "summary": {
+    "event": "summary",
+    "best_model": "ppo_pong_custom_2",
+    "best_score": -0.659999999999837,
+    "metrics_csv": "logs/metrics.csv",
+    "video_dir": "videos",
+    "model_dir": "models",
+    "last_combined_video": null,
+    "last_eval_video": null,
+    "run_timestamp": "20260109-194027",
+    "stop_reason": "max_cycles",
+    "cycles": [
+      {
+        "cycle": 1,
+        "scores": [
+          [
+            "ppo_pong_custom_5",
+            -17.393333333333498
+          ],
+          [
+            "ppo_pong_custom_2",
+            -15.693333333334317
+          ],
+          [
+            "ppo_pong_custom_3",
+            -18.06000000000045
+          ],
+          [
+            "ppo_pong_custom_4",
+            -19.080000000000023
+          ],
+          [
+            "ppo_pong_custom_1",
+            -17.39333333333417
+          ],
+          [
+            "ppo_pong_custom_0",
+            -12.960000000000948
+          ]
+        ],
+        "best_id": "ppo_pong_custom_0",
+        "best_score": -12.960000000000948,
+        "timestamp": "20260109-194030",
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      {
+        "cycle": 2,
+        "scores": [
+          [
+            "ppo_pong_custom_0",
+            -3.7666666666668878
+          ],
+          [
+            "ppo_pong_custom_5",
+            -1.7600000000000902
+          ],
+          [
+            "ppo_pong_custom_4",
+            -6.499999999999841
+          ],
+          [
+            "ppo_pong_custom_2",
+            -6.546666666666506
+          ],
+          [
+            "ppo_pong_custom_3",
+            -4.766666666666748
+          ],
+          [
+            "ppo_pong_custom_1",
+            -5.100000000000262
+          ]
+        ],
+        "best_id": "ppo_pong_custom_5",
+        "best_score": -1.7600000000000902,
+        "timestamp": "20260109-194210",
+        "seeds": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      {
+        "cycle": 3,
+        "scores": [
+          [
+            "ppo_pong_custom_5",
+            -2.7666666666667585
+          ],
+          [
+            "ppo_pong_custom_3",
+            -3.053333333333485
+          ],
+          [
+            "ppo_pong_custom_0",
+            -3.079999999999971
+          ],
+          [
+            "ppo_pong_custom_1",
+            -5.846666666666685
+          ],
+          [
+            "ppo_pong_custom_4",
+            -2.7800000000001295
+          ],
+          [
+            "ppo_pong_custom_2",
+            -2.0733333333333372
+          ]
+        ],
+        "best_id": "ppo_pong_custom_2",
+        "best_score": -2.0733333333333372,
+        "timestamp": "20260109-194402",
+        "seeds": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      {
+        "cycle": 4,
+        "scores": [
+          [
+            "ppo_pong_custom_3",
+            -2.1000000000001013
+          ],
+          [
+            "ppo_pong_custom_4",
+            -2.4200000000000568
+          ],
+          [
+            "ppo_pong_custom_0",
+            -3.046666666666764
+          ],
+          [
+            "ppo_pong_custom_2",
+            -0.659999999999837
+          ],
+          [
+            "ppo_pong_custom_1",
+            -1.7066666666667298
+          ],
+          [
+            "ppo_pong_custom_5",
+            -1.7333333333331609
+          ]
+        ],
+        "best_id": "ppo_pong_custom_2",
+        "best_score": -0.659999999999837,
+        "timestamp": "20260109-194548",
+        "seeds": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      {
+        "cycle": 5,
+        "scores": [
+          [
+            "ppo_pong_custom_3",
+            -1.366666666666669
+          ],
+          [
+            "ppo_pong_custom_2",
+            -2.0466666666666598
+          ],
+          [
+            "ppo_pong_custom_0",
+            -2.11333333333349
+          ],
+          [
+            "ppo_pong_custom_1",
+            -3.020000000000343
+          ],
+          [
+            "ppo_pong_custom_4",
+            -1.0933333333332604
+          ],
+          [
+            "ppo_pong_custom_5",
+            -1.7333333333333047
+          ]
+        ],
+        "best_id": "ppo_pong_custom_4",
+        "best_score": -1.0933333333332604,
+        "timestamp": "20260109-194739",
+        "seeds": [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      }
+    ]
+  }
+}
