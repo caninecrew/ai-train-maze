@@ -34,7 +34,7 @@ on:
       iterations_per_set:
         description: "Parallel model lines per cycle"
         required: false
-        default: "1"
+        default: "6"
       max_steps:
         description: "Max steps per episode (maze env)"
         required: false
