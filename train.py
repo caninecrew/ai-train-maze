@@ -132,11 +132,24 @@ def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
     cols = int(np.ceil(np.sqrt(num_models)))
     rows = int(np.ceil(num_models / cols))
 
-    placeholder = None
+    max_h = 0
+    max_w = 0
     for seg in segments:
-        if seg:
-            placeholder = np.zeros_like(seg[0])
-            break
+        for frame in seg:
+            h, w = frame.shape[:2]
+            max_h = max(max_h, h)
+            max_w = max(max_w, w)
+
+    if max_h == 0 or max_w == 0:
+        return []
+
+    def _pad(frame: np.ndarray) -> np.ndarray:
+        h, w = frame.shape[:2]
+        if h == max_h and w == max_w:
+            return frame
+        canvas = np.zeros((max_h, max_w, frame.shape[2]), dtype=frame.dtype)
+        canvas[:h, :w, :] = frame
+        return canvas
 
     grid_frames: List[np.ndarray] = []
 
@@ -151,11 +164,9 @@ def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
                 seg = segments[idx]
                 if seg:
                     if i < len(seg):
-                        row_tiles.append(seg[i])
+                        row_tiles.append(_pad(seg[i]))
                     else:
-                        row_tiles.append(seg[-1])  # hold last frame if shorter
-                elif placeholder is not None:
-                    row_tiles.append(placeholder)
+                        row_tiles.append(_pad(seg[-1]))  # hold last frame if shorter
             if row_tiles:
                 row_images.append(np.concatenate(row_tiles, axis=1))
         if row_images:
