@@ -647,6 +647,13 @@ def main():
     random.seed(base_seed)
     np.random.seed(base_seed)
 
+    if not cfg.resume_from:
+        model_dir = Path(cfg.model_dir)
+        latest_candidates = sorted(model_dir.glob(f"{model_prefix}_*_latest.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if latest_candidates:
+            cfg.resume_from = str(latest_candidates[0])
+            print(f"Auto-resume: using latest checkpoint {cfg.resume_from}")
+
     print(
         f"Config: game={game.name}, profile={cfg.profile or 'none'}, train_steps={cfg.train_timesteps}, "
         f"iters_per_set={cfg.iterations_per_set}, max_cycles={cfg.max_cycles}, "
