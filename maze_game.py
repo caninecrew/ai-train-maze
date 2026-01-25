@@ -195,17 +195,21 @@ def render_grid_frame(
     cell_size: int = 8,
     agent_color: Tuple[int, int, int] = (0, 180, 255),
     goal_color: Tuple[int, int, int] = (0, 170, 0),
+    background: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     from PIL import Image, ImageDraw
 
     rows, cols = grid.shape
     cell = max(2, int(cell_size))
-    grid_img = np.where(grid == 1, 0, 255).astype(np.uint8)
-    img = Image.fromarray(grid_img, mode="L")
-    resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
-    if resample is None:
-        resample = getattr(Image, "NEAREST", 0)
-    img = img.resize((cols * cell, rows * cell), resample=resample).convert("RGB")
+    if background is None:
+        grid_img = np.where(grid == 1, 0, 255).astype(np.uint8)
+        img = Image.fromarray(grid_img, mode="L")
+        resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
+        if resample is None:
+            resample = getattr(Image, "NEAREST", 0)
+        img = img.resize((cols * cell, rows * cell), resample=resample).convert("RGB")
+    else:
+        img = Image.fromarray(background).convert("RGB")
 
     draw = ImageDraw.Draw(img)
     gr, gc = goal
@@ -221,6 +225,36 @@ def render_grid_frame(
     ay1 = float(ay0 + cell)
     draw.ellipse((ax0 + pad, ay0 + pad, ax1 - pad, ay1 - pad), fill=agent_color)
     return np.array(img)
+
+
+def render_png_frame(
+    png_path: str,
+    grid: np.ndarray,
+    agent_pos: Tuple[float, float],
+    goal: Tuple[int, int],
+    cell_size: int = 8,
+    agent_color: Tuple[int, int, int] = (0, 180, 255),
+    goal_color: Tuple[int, int, int] = (0, 170, 0),
+) -> np.ndarray:
+    from PIL import Image, ImageDraw
+
+    base = Image.open(png_path).convert("RGBA")
+    w, h = base.size
+    cols = grid.shape[1]
+    rows = grid.shape[0]
+    draw = ImageDraw.Draw(base)
+
+    gr, gc = goal
+    gx = (gc + 0.5) * (w / cols)
+    gy = (gr + 0.5) * (h / rows)
+    radius = max(2, int(min(w / cols, h / rows) * 0.35))
+    draw.ellipse((gx - radius, gy - radius, gx + radius, gy + radius), fill=goal_color)
+
+    ar, ac = agent_pos
+    ax = (ac + 0.5) * (w / cols)
+    ay = (ar + 0.5) * (h / rows)
+    draw.ellipse((ax - radius, ay - radius, ax + radius, ay + radius), fill=agent_color)
+    return np.array(base.convert("RGB"))
 
 
 def _auto_pick_start_goal(
