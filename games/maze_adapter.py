@@ -39,10 +39,16 @@ def _resolve_maze_paths() -> Dict[str, Path]:
 class MazeEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
 
-    def __init__(self, render_mode: Optional[str] = None, seed: Optional[int] = None):
+    def __init__(
+        self,
+        render_mode: Optional[str] = None,
+        seed: Optional[int] = None,
+        variant: Optional[int] = None,
+    ):
         super().__init__()
         self.render_mode = render_mode
         self._rng = np.random.default_rng(seed)
+        self._variant = variant
 
         paths = _resolve_maze_paths()
         meta = json.loads(paths["meta"].read_text(encoding="utf-8"))
@@ -139,7 +145,7 @@ class MazeEnv(gym.Env):
             wall_mask = gray.point(lambda p: 255 if p < 128 else 0)
             walls = Image.new("RGBA", composed.size, (0, 0, 0, 0))
             walls.paste(composed, mask=wall_mask)
-            self._walls = walls.convert("RGB")
+            self._walls = walls
 
         frame = self._bg.copy()
         draw = ImageDraw.Draw(frame)
@@ -147,14 +153,27 @@ class MazeEnv(gym.Env):
         x = (self._agent[1] + 0.5) * (w / self._cols)
         y = (self._agent[0] + 0.5) * (h / self._rows)
         radius = max(2, int(min(w / self._cols, h / self._rows) * 0.35))
-        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 60, 60))
-        if hasattr(self, "_walls") and self._walls is not None:
-            frame = Image.alpha_composite(frame.convert("RGBA"), self._walls.convert("RGBA")).convert("RGB")
+        palette = [
+            (0, 180, 255),
+            (255, 120, 0),
+            (120, 220, 0),
+            (180, 0, 255),
+            (255, 0, 90),
+            (0, 220, 180),
+            (255, 200, 0),
+            (60, 120, 255),
+        ]
+        color = palette[0]
+        if self._variant is not None:
+            color = palette[int(self._variant) % len(palette)]
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
+        if self._walls is not None:
+            frame = Image.alpha_composite(frame.convert("RGBA"), self._walls).convert("RGB")
         return np.array(frame)
 
 
 def _make_env(render_mode: Optional[str], seed: Optional[int], variant: Optional[int]) -> gym.Env:
-    env = MazeEnv(render_mode=render_mode, seed=seed)
+    env = MazeEnv(render_mode=render_mode, seed=seed, variant=variant)
     if seed is not None:
         env.reset(seed=seed)
     return env
