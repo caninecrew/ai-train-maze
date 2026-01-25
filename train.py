@@ -514,6 +514,32 @@ def _print_status(cfg: TrainConfig) -> None:
     print(f"Best model id: {best_row.get('model_id')} | avg_reward={best_row.get('avg_reward')}{extra_str}")
     print(f"Last recorded at cycle {best_row.get('cycle')} on {best_row.get('timestamp')}")
 
+
+def _best_checkpoint_from_metrics(cfg: TrainConfig, model_prefix: str) -> Optional[str]:
+    metrics_path = Path(cfg.metrics_csv)
+    if not metrics_path.exists():
+        return None
+    best_row = None
+    with metrics_path.open("r", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            model_id = row.get("model_id", "")
+            if not model_id or not model_id.startswith(model_prefix):
+                continue
+            try:
+                reward = float(row.get("avg_reward", float("-inf")))
+            except Exception:
+                reward = float("-inf")
+            if best_row is None or reward > float(best_row.get("avg_reward", float("-inf"))):
+                best_row = row
+    if not best_row:
+        return None
+    model_id = best_row.get("model_id", "")
+    if not model_id:
+        return None
+    candidate = Path(cfg.model_dir) / f"{model_id}_latest.zip"
+    return str(candidate) if candidate.exists() else None
+
 def evaluate_model(game, model: PPO, episodes: int, deterministic: bool = True) -> Dict[str, float]:
     return game.evaluate(model, episodes, deterministic)
 
@@ -648,11 +674,20 @@ def main():
     np.random.seed(base_seed)
 
     if not cfg.resume_from:
-        model_dir = Path(cfg.model_dir)
-        latest_candidates = sorted(model_dir.glob(f"{model_prefix}_*_latest.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if latest_candidates:
-            cfg.resume_from = str(latest_candidates[0])
-            print(f"Auto-resume: using latest checkpoint {cfg.resume_from}")
+        best_from_metrics = _best_checkpoint_from_metrics(cfg, model_prefix)
+        if best_from_metrics:
+            cfg.resume_from = best_from_metrics
+            print(f"Auto-resume: using best checkpoint from metrics {cfg.resume_from}")
+        else:
+            model_dir = Path(cfg.model_dir)
+            latest_candidates = sorted(
+                model_dir.glob(f"{model_prefix}_*_latest.zip"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if latest_candidates:
+                cfg.resume_from = str(latest_candidates[0])
+                print(f"Auto-resume: using latest checkpoint {cfg.resume_from}")
 
     print(
         f"Config: game={game.name}, profile={cfg.profile or 'none'}, train_steps={cfg.train_timesteps}, "
