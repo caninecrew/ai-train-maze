@@ -23,15 +23,20 @@ import os
 import re
 import math
 import time
-from typing import Tuple, Union, Optional, Dict, Any, List
+from typing import Tuple, Union, Optional, Dict, Any, List, Set, TYPE_CHECKING, cast
 
 import numpy as np
 try:
     import tkinter as tk
     from tkinter import messagebox
+    tk = cast(Any, tk)
+    messagebox = cast(Any, messagebox)
 except Exception:  # pragma: no cover - optional GUI dependency
-    tk = None
-    messagebox = None
+    tk = cast(Any, None)
+    messagebox = cast(Any, None)
+
+if TYPE_CHECKING:
+    import tkinter as tk  # pragma: no cover
 
 
 # ----------------------------
@@ -197,10 +202,9 @@ def render_grid_frame(
     cell = max(2, int(cell_size))
     grid_img = np.where(grid == 1, 0, 255).astype(np.uint8)
     img = Image.fromarray(grid_img, mode="L")
-    try:
-        resample = Image.Resampling.NEAREST
-    except AttributeError:
-        resample = Image.NEAREST
+    resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
+    if resample is None:
+        resample = getattr(Image, "NEAREST", 0)
     img = img.resize((cols * cell, rows * cell), resample=resample).convert("RGB")
 
     draw = ImageDraw.Draw(img)
@@ -300,7 +304,7 @@ def find_latest_maze_id(maze_dir: str) -> int:
 class MazeGame:
     def __init__(
         self,
-        root: tk.Tk,
+        root: Any,
         maze_dir: str,
         maze_id: int,
         cell_size: int = 24,
@@ -329,7 +333,7 @@ class MazeGame:
         self.goal = (0, 0)
         self.agent = (0, 0)
         self.agent_pos: Tuple[float, float] = (0.0, 0.0)
-        self.keys_down: set[str] = set()
+        self.keys_down: Set[str] = set()
         self.speed_cells_per_sec: float = 6.0
         self.agent_radius_cells: float = 0.35
         self._last_tick: float = time.perf_counter()
@@ -575,7 +579,7 @@ def main():
                         help="Disable cell grid lines")
     args = parser.parse_args()
 
-    if tk is None:
+    if tk is None or messagebox is None:
         raise RuntimeError("tkinter is not available; install it to run the GUI.")
     root = tk.Tk()
     root.title("Maze Game")
