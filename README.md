@@ -50,6 +50,7 @@ If you already have Ubuntu CLI (WSL) installed:
    - `python -m venv .venv`
    - `source .venv/bin/activate`
 3) Install deps: `pip install -r requirements.txt`
+4) For a full walkthrough, see `docs/wsl_setup.md`.
 
 If you prefer a one-liner setup after cloning, run the bootstrap scripts:
 - Windows (PowerShell): `powershell -ExecutionPolicy Bypass -File scripts/setup_env.ps1`
