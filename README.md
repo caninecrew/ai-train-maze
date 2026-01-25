@@ -35,6 +35,7 @@ Best practices and naming convention:
 ## Requirements
 - Python 3.9+
 - Recommended: use a virtual environment and install dependencies with `pip install -r requirements.txt`.
+- Minimal (conversion/render only): `pip install -r requirements-min.txt`.
 
 ## Quickstart (venv)
 ```

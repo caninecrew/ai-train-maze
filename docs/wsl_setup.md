@@ -31,6 +31,11 @@ source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ```
 
+If you only need conversion/rendering (no training), use the minimal set:
+```bash
+python3 -m pip install -r requirements-min.txt
+```
+
 ## 4) Run the maze workflow locally
 Convert the maze:
 ```bash
