@@ -22,11 +22,15 @@ on:
       max_cycles:
         description: "Training cycles"
         required: false
-        default: "1"
+        default: "5"
       train_args:
         description: "Extra train.py args (optional)"
         required: false
         default: ""
+      early_stop_patience:
+        description: "Early stop patience (set high to run all cycles)"
+        required: false
+        default: "9999"
       iterations_per_set:
         description: "Parallel model lines per cycle"
         required: false
@@ -130,7 +134,11 @@ jobs:
           if [ -z "$iters" ]; then
             iters="1"
           fi
-          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" ${{ inputs.train_args }}
+          patience="${{ inputs.early_stop_patience }}"
+          if [ -z "$patience" ]; then
+            patience="9999"
+          fi
+          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" --early-stop-patience "$patience" ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'
