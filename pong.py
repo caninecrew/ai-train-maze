@@ -77,6 +77,7 @@ class PongEnv:
         # Important: dummy video driver must be set BEFORE pygame.init()
         if self.render_mode != "human":
             os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+            os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
         pygame.init()
 
