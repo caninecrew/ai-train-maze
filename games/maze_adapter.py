@@ -46,6 +46,7 @@ class MazeEnv(gym.Env):
 
         paths = _resolve_maze_paths()
         meta = json.loads(paths["meta"].read_text(encoding="utf-8"))
+        self._meta = meta
         self._maze_id = paths["maze_id"]
         self._grid = np.load(paths["grid"])
         self._rows, self._cols = self._grid.shape
@@ -62,6 +63,7 @@ class MazeEnv(gym.Env):
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
 
         self._bg = None
+        self._walls = None
         self._png_path = Path(meta.get("png", ""))
         if self._png_path and not self._png_path.is_absolute():
             self._png_path = (Path.cwd() / self._png_path).resolve()
@@ -127,8 +129,17 @@ class MazeEnv(gym.Env):
             if not self._png_path.exists():
                 raise FileNotFoundError(f"Maze PNG not found: {self._png_path}")
             img = Image.open(self._png_path).convert("RGBA")
+            bbox = self._meta.get("trim_bbox")
+            if bbox and len(bbox) == 4:
+                img = img.crop(tuple(int(v) for v in bbox))
             bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
-            self._bg = Image.alpha_composite(bg, img).convert("RGB")
+            composed = Image.alpha_composite(bg, img)
+            self._bg = composed.convert("RGB")
+            gray = composed.convert("L")
+            wall_mask = gray.point(lambda p: 255 if p < 128 else 0)
+            walls = Image.new("RGBA", composed.size, (0, 0, 0, 0))
+            walls.paste(composed, mask=wall_mask)
+            self._walls = walls.convert("RGB")
 
         frame = self._bg.copy()
         draw = ImageDraw.Draw(frame)
@@ -137,6 +148,8 @@ class MazeEnv(gym.Env):
         y = (self._agent[0] + 0.5) * (h / self._rows)
         radius = max(2, int(min(w / self._cols, h / self._rows) * 0.35))
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 60, 60))
+        if hasattr(self, "_walls") and self._walls is not None:
+            frame = Image.alpha_composite(frame.convert("RGBA"), self._walls.convert("RGBA")).convert("RGB")
         return np.array(frame)
 
 

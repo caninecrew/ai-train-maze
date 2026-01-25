@@ -9,6 +9,12 @@
   "auto_invert": true,
   "trim": true,
   "trim_tol": 5,
+  "trim_bbox": [
+    0,
+    0,
+    302,
+    302
+  ],
   "start": null,
   "goal": null,
   "encoding": {

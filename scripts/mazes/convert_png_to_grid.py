@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Optional
 
 try:
     import cv2
@@ -50,7 +51,7 @@ def load_grayscale(png_path: Path) -> np.ndarray:
     return np.array(composed)
 
 
-def trim_to_content(gray: np.ndarray, tol: int = 5) -> np.ndarray:
+def trim_to_content(gray: np.ndarray, tol: int = 5) -> tuple[np.ndarray, Optional[tuple[int, int, int, int]]]:
     h, w = gray.shape
     border = np.concatenate(
         [gray[0, :], gray[h - 1, :], gray[:, 0], gray[:, w - 1]]
@@ -58,11 +59,11 @@ def trim_to_content(gray: np.ndarray, tol: int = 5) -> np.ndarray:
     bg = int(np.median(border))
     mask = np.abs(gray.astype(np.int16) - bg) > tol
     if not mask.any():
-        return gray
+        return gray, None
     ys, xs = np.where(mask)
     y0, y1 = ys.min(), ys.max() + 1
     x0, x1 = xs.min(), xs.max() + 1
-    return gray[y0:y1, x0:x1]
+    return gray[y0:y1, x0:x1], (x0, y0, x1, y1)
 
 
 def otsu_threshold(gray: np.ndarray) -> int:
@@ -112,7 +113,7 @@ def png_to_grid_patchvote(
     auto_invert: bool = True,
     trim: bool = True,
     trim_tol: int = 5,
-) -> np.ndarray:
+) -> tuple[np.ndarray, Optional[tuple[int, int, int, int]]]:
     """
     Convert a black/white maze PNG into a grid:
       0 = open (walkable)
@@ -122,8 +123,9 @@ def png_to_grid_patchvote(
     than sampling a single pixel.
     """
     img = load_grayscale(png_path)
+    trim_bbox = None
     if trim:
-        img = trim_to_content(img, tol=trim_tol)
+        img, trim_bbox = trim_to_content(img, tol=trim_tol)
 
     # Binary mask: white corridors = 255, black walls/background = 0
     bw = threshold_image(img, threshold)
@@ -155,7 +157,7 @@ def png_to_grid_patchvote(
             white_frac = (patch == 255).mean()
             grid[r, c] = 0 if white_frac >= open_ratio else 1
 
-    return grid
+    return grid, trim_bbox
 
 
 def png_to_grid_resize(
@@ -167,10 +169,11 @@ def png_to_grid_resize(
     auto_invert: bool = True,
     trim: bool = True,
     trim_tol: int = 5,
-) -> np.ndarray:
+) -> tuple[np.ndarray, Optional[tuple[int, int, int, int]]]:
     img = load_grayscale(png_path)
+    trim_bbox = None
     if trim:
-        img = trim_to_content(img, tol=trim_tol)
+        img, trim_bbox = trim_to_content(img, tol=trim_tol)
 
     bw = threshold_image(img, threshold)
 
@@ -193,7 +196,7 @@ def png_to_grid_resize(
             resample = getattr(Image, "BILINEAR", 2)
         resized = np.array(Image.fromarray(bw).resize((cols, rows), resample=resample))
     grid = np.where(resized >= 128, 0, 1).astype(np.uint8)
-    return grid
+    return grid, trim_bbox
 
 
 def grid_to_ascii(grid: np.ndarray, start: tuple[int, int] | None, goal: tuple[int, int] | None) -> str:
@@ -305,7 +308,7 @@ def main() -> None:
     trim = not args.no_trim
 
     if args.method == "resize":
-        grid = png_to_grid_resize(
+        grid, trim_bbox = png_to_grid_resize(
             png_path=png_path,
             rows=args.rows,
             cols=args.cols,
@@ -316,7 +319,7 @@ def main() -> None:
             trim_tol=args.trim_tol,
         )
     else:
-        grid = png_to_grid_patchvote(
+        grid, trim_bbox = png_to_grid_patchvote(
             png_path=png_path,
             rows=args.rows,
             cols=args.cols,
@@ -349,6 +352,7 @@ def main() -> None:
         "auto_invert": bool(auto_invert),
         "trim": bool(trim),
         "trim_tol": int(args.trim_tol),
+        "trim_bbox": [int(v) for v in trim_bbox] if trim_bbox else None,
         "start": list(start) if start else None,
         "goal": list(goal) if goal else None,
         "encoding": {"open": 0, "wall": 1},
