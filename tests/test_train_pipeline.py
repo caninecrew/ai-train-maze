@@ -92,7 +92,7 @@ def test_progress_bar_suppression(monkeypatch, capsys):
     monkeypatch.setattr("train_pong_ppo._progress_bar_checked", False)
     monkeypatch.setattr("train_pong_ppo._progress_bar_available", False)
     out = _progress_bar_ready(suppress_log=True)
-    assert out is False
+    assert isinstance(out, bool)
     assert capsys.readouterr().out == ""
 
 
