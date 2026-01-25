@@ -39,13 +39,19 @@ jobs:
           for png in assets/mazes/maze_*.png; do
             [ -e "$png" ] || continue
             maze_id="$(basename "$png" .png)"
+            cfg="assets/mazes/$maze_id.json"
             out_dir="data/mazes/$maze_id"
             mkdir -p "$out_dir"
+            cfg_arg=""
+            if [ -f "$cfg" ]; then
+              cfg_arg="--config $cfg"
+            fi
             python scripts/mazes/convert_png_to_grid.py \
               --png "$png" \
               --rows 60 \
               --cols 60 \
-              --out "$out_dir/$maze_id"
+              --out "$out_dir/$maze_id" \
+              $cfg_arg
           done
 
       - name: Commit converted mazes

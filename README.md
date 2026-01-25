@@ -20,6 +20,7 @@ Deliverables:
 Best practices and naming convention:
 - See `docs/maze_best_practices.md` for the full pipeline, thresholds, and scaling guidance.
 - Maze IDs use `maze_###` (e.g., `maze_001`) and stay consistent across assets/data/outputs.
+- Optional per-maze config can live at `assets/mazes/maze_###.json` (rows/cols, thresholds).
 
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.

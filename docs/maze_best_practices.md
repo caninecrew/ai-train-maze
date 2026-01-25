@@ -71,6 +71,7 @@ Use a stable maze identifier with a 3-digit index:
 
 Recommended layout:
 - `assets/mazes/maze_001.png`
+- `assets/mazes/maze_001.json` (optional config overrides)
 - `data/mazes/maze_001/maze_001_grid.npy`
 - `data/mazes/maze_001/maze_001_grid.txt`
 - `data/mazes/maze_001/maze_001_meta.json`
@@ -82,6 +83,7 @@ Converter location:
 GitHub Actions automation:
 - The `maze-convert` workflow regenerates grids on push when a maze PNG changes.
 - Add a new maze as `assets/mazes/maze_###.png` and CI will write `data/mazes/maze_###/*`.
+- Optional per-maze settings live in `assets/mazes/maze_###.json` (e.g., rows/cols, threshold).
 
 ## Scalability strategy
 - Keep grid size fixed to bound state space.

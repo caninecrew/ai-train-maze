@@ -268,6 +268,11 @@ def main() -> None:
         required=True,
         help="Output prefix path, e.g. data/mazes/maze_001/maze_001 (creates *_grid.npy, etc.)",
     )
+    ap.add_argument(
+        "--config",
+        default="",
+        help="Optional JSON config with overrides (rows, cols, threshold, open_ratio, method, invert, auto_invert, trim, trim_tol, start, goal).",
+    )
     ap.add_argument("--start", default="", help="Optional start as r,c (e.g. 1,1).")
     ap.add_argument("--goal", default="", help="Optional goal as r,c (e.g. 58,58).")
 
@@ -276,6 +281,13 @@ def main() -> None:
     png_path = Path(args.png)
     out_prefix = Path(args.out)
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.config:
+        config_path = Path(args.config)
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        for key, value in config.items():
+            if hasattr(args, key):
+                setattr(args, key, value)
 
     def parse_rc(s: str) -> tuple[int, int] | None:
         s = s.strip()
