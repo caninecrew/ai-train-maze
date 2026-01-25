@@ -88,10 +88,12 @@ jobs:
           if [ -f "$cfg" ]; then
             cfg_arg="--config $cfg"
           fi
+          rows="${ROWS:-60}"
+          cols="${COLS:-60}"
           python scripts/mazes/convert_png_to_grid.py \
             --png "$png" \
-            --rows "$ROWS" \
-            --cols "$COLS" \
+            --rows "$rows" \
+            --cols "$cols" \
             --out "$out_dir/$maze_id" \
             $cfg_arg
           echo "MAZE_ID=$maze_id" >> "$GITHUB_ENV"
