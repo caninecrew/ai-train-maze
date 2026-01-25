@@ -227,6 +227,29 @@ def grid_to_ascii(grid: np.ndarray, start: tuple[int, int] | None, goal: tuple[i
     return "\n".join(lines)
 
 
+def grid_to_xo(grid: np.ndarray, start: tuple[int, int] | None, goal: tuple[int, int] | None) -> str:
+    """
+    Render grid as X/O:
+      X = wall
+      O = open
+      S = start
+      G = goal
+    """
+    rows, cols = grid.shape
+    lines = []
+    for r in range(rows):
+        row_chars = []
+        for c in range(cols):
+            ch = "O" if grid[r, c] == 0 else "X"
+            if start is not None and (r, c) == start:
+                ch = "S"
+            if goal is not None and (r, c) == goal:
+                ch = "G"
+            row_chars.append(ch)
+        lines.append("".join(row_chars))
+    return "\n".join(lines)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Convert maze PNG to training grid (0=open, 1=wall).")
     ap.add_argument("--png", required=True, help="Path to maze PNG (black background, white corridors).")
@@ -351,6 +374,10 @@ def main() -> None:
     txt_path = out_prefix.with_name(out_prefix.name + "_grid.txt")
     txt_path.write_text(grid_to_ascii(grid, start=start, goal=goal), encoding="utf-8")
 
+    # Save X/O preview
+    xo_path = out_prefix.with_name(out_prefix.name + "_grid_xo.txt")
+    xo_path.write_text(grid_to_xo(grid, start=start, goal=goal), encoding="utf-8")
+
     # Save metadata
     meta_path = out_prefix.with_name(out_prefix.name + "_meta.json")
     meta = {
@@ -374,6 +401,7 @@ def main() -> None:
 
     print(f"Saved: {npy_path}")
     print(f"Saved: {txt_path}")
+    print(f"Saved: {xo_path}")
     print(f"Saved: {meta_path}")
 
 

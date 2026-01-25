@@ -35,6 +35,30 @@ Why:
    - `maze_grid.txt` for ASCII preview.
    - `maze_meta.json` for rows/cols + start/goal.
 
+## Optional: PNG -> X/O text grids
+If you need a plain-text map (X = wall, O = open), a two-color conversion pass keeps it stable.
+
+Recommended approaches:
+- Python (automation): use Pillow to threshold to 2 colors, then map pixels to X/O.
+- ImageMagick (CLI): threshold to 2 colors, then export to text with `txt:`.
+- Online tools (quick checks): reduce to 2 colors, then map hex colors to X/O.
+
+Python sketch:
+```python
+from PIL import Image
+
+img = Image.open("maze.png").convert("L")
+thresh = img.point(lambda p: 255 if p > 128 else 0, mode="1")
+w, h = thresh.size
+lines = []
+for y in range(h):
+    row = []
+    for x in range(w):
+        row.append("O" if thresh.getpixel((x, y)) else "X")
+    lines.append("".join(row))
+print("\n".join(lines))
+```
+
 ## Start/goal handling
 - Store start and goal in metadata, not the image.
 - `start = (row, col)` and `goal = (row, col)` live in `maze_meta.json`.

@@ -30,10 +30,27 @@ def _resolve_maze_paths() -> Dict[str, Path]:
         maze_id = meta_path.stem.replace("_meta", "")
 
     grid_path = meta_path.with_name(f"{maze_id}_grid.npy")
-    if not grid_path.exists():
-        raise FileNotFoundError(f"Missing grid file: {grid_path}")
+    grid_xo_path = meta_path.with_name(f"{maze_id}_grid_xo.txt")
+    if not grid_path.exists() and not grid_xo_path.exists():
+        raise FileNotFoundError(f"Missing grid file: {grid_path} (or {grid_xo_path})")
 
-    return {"maze_id": maze_id, "meta": meta_path, "grid": grid_path}
+    return {"maze_id": maze_id, "meta": meta_path, "grid": grid_path, "grid_xo": grid_xo_path}
+
+
+def _load_grid(grid_path: Path, grid_xo_path: Path) -> np.ndarray:
+    if grid_path.exists():
+        return np.load(grid_path)
+    text = grid_xo_path.read_text(encoding="utf-8").strip().splitlines()
+    rows = len(text)
+    cols = max(len(line) for line in text) if rows else 0
+    grid = np.ones((rows, cols), dtype=np.uint8)
+    for r, line in enumerate(text):
+        for c, ch in enumerate(line):
+            if ch in ("O", "S", "G"):
+                grid[r, c] = 0
+            elif ch == "X":
+                grid[r, c] = 1
+    return grid
 
 
 class MazeEnv(gym.Env):
@@ -54,7 +71,7 @@ class MazeEnv(gym.Env):
         meta = json.loads(paths["meta"].read_text(encoding="utf-8"))
         self._meta = meta
         self._maze_id = paths["maze_id"]
-        self._grid = np.load(paths["grid"])
+        self._grid = _load_grid(paths["grid"], paths["grid_xo"])
         self._rows, self._cols = self._grid.shape
         max_steps_env = os.getenv("MAZE_MAX_STEPS", "").strip()
         if max_steps_env:
@@ -65,12 +82,15 @@ class MazeEnv(gym.Env):
         else:
             self._max_steps = int(self._rows * self._cols)
         self._step_count = 0
-        self._wall_penalty = -500.0
+        self._wall_penalty = -5.0
+        self._step_penalty = -0.01
+        self._goal_bonus = 10.0
 
         start = meta.get("start")
         goal = meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
         self._goal = self._sanitize_point(goal, fallback="goal")
+        self._dist_map = self._compute_distances(self._goal)
 
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
@@ -101,6 +121,7 @@ class MazeEnv(gym.Env):
             self._rng = np.random.default_rng(seed)
         self._agent = tuple(self._start)
         self._step_count = 0
+        self._prev_dist = self._dist_at(self._agent)
         return self._obs(), {}
 
     def step(self, action):
@@ -109,18 +130,42 @@ class MazeEnv(gym.Env):
         r, c = self._agent
         nr, nc = r + dr, c + dc
 
-        reward = -0.01
+        reward = self._step_penalty
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
+            new_dist = self._dist_at(self._agent)
+            if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
+                reward += 0.1 * (self._prev_dist - new_dist)
+            self._prev_dist = new_dist
         else:
             reward += self._wall_penalty
 
         self._step_count += 1
         terminated = self._agent == self._goal
         if terminated:
-            reward += 1.0
+            reward += self._goal_bonus
         truncated = self._step_count >= self._max_steps
         return self._obs(), reward, terminated, truncated, {}
+
+    def _dist_at(self, pos: tuple[int, int]) -> float:
+        r, c = pos
+        return float(self._dist_map[r, c])
+
+    def _compute_distances(self, goal: tuple[int, int]) -> np.ndarray:
+        dist = np.full((self._rows, self._cols), np.inf, dtype=np.float32)
+        gr, gc = goal
+        if self._grid[gr, gc] != 0:
+            return dist
+        dist[gr, gc] = 0.0
+        queue = [(gr, gc)]
+        for r, c in queue:
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
+                    if dist[nr, nc] == np.inf:
+                        dist[nr, nc] = dist[r, c] + 1.0
+                        queue.append((nr, nc))
+        return dist
 
     def _obs(self) -> np.ndarray:
         ar, ac = self._agent
