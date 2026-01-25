@@ -4,8 +4,8 @@ permissions:
   contents: write
 
 on:
-  push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   pytest:
@@ -44,16 +44,6 @@ jobs:
         run: |
           mkdir -p videos models logs
           python train_pong_ppo.py --max-cycles 1
-
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-artifacts
-          path: |
-            videos/
-            models/
-            logs/
 
       - name: Commit test outputs
         if: github.event_name != 'pull_request'

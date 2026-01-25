@@ -60,6 +60,11 @@ Optional flags:
 - Training pipeline tests (skip the slow test): `python -m pytest tests/test_train_pipeline.py -m "not slow"`
 - Include slow training smoke test: `python -m pytest tests/test_train_pipeline.py -m slow`
 
+## CI artifacts
+- GitHub Actions keeps all `logs/` in the repo for the dashboard.
+- Only the newest `models/*.zip` and newest `videos/*.mp4` are kept; older ones are deleted each run.
+- Outputs are committed back to the repo (no artifact upload).
+
 ## Troubleshooting
 - Progress bars: install `pip install rich tqdm` (or `pip install stable-baselines3[extra]`) to enable progress output.
 - Headless pygame: ensure `SDL_VIDEODRIVER=dummy` is respected (default when not rendering). On Linux servers install `libsdl2-dev` packages; on macOS use `brew install sdl2 sdl2_image`.
