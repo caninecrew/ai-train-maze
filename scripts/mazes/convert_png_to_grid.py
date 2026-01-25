@@ -186,10 +186,11 @@ def png_to_grid_resize(
     else:
         from PIL import Image
 
-        try:
-            resample = Image.Resampling.BOX
-        except AttributeError:
-            resample = Image.BOX
+        resample = getattr(getattr(Image, "Resampling", Image), "BOX", None)
+        if resample is None:
+            resample = getattr(Image, "BOX", None)
+        if resample is None:
+            resample = getattr(Image, "BILINEAR", 2)
         resized = np.array(Image.fromarray(bw).resize((cols, rows), resample=resample))
     grid = np.where(resized >= 128, 0, 1).astype(np.uint8)
     return grid
