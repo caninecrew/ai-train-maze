@@ -221,8 +221,13 @@ def render_grid_frame(
     ar, ac = agent_pos
     ax = (ac) * cell
     ay = (ar) * cell
-    radius = max(2, int(cell * 0.35))
-    draw.ellipse((ax - radius, ay - radius, ax + radius, ay + radius), fill=agent_color)
+    radius = max(3, int(cell * 0.45))
+    draw.ellipse(
+        (ax - radius, ay - radius, ax + radius, ay + radius),
+        fill=agent_color,
+        outline=(0, 0, 0),
+        width=max(1, radius // 4),
+    )
     return np.array(img)
 
 
