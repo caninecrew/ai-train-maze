@@ -1,0 +1,7 @@
+cycle,model_id,avg_reward,avg_reward_ci,avg_ep_len,avg_ep_len_ci,delta_reward,timestamp,run_timestamp,game
+1,ppo_template_5,50.0,0.0,50.0,0.0,,20260125-051357,20260125-051356,template
+1,ppo_template_0,50.0,0.0,50.0,0.0,,20260125-051357,20260125-051356,template
+1,ppo_template_1,50.0,0.0,50.0,0.0,,20260125-051357,20260125-051356,template
+1,ppo_template_2,50.0,0.0,50.0,0.0,,20260125-051357,20260125-051356,template
+1,ppo_template_4,50.0,0.0,50.0,0.0,,20260125-051357,20260125-051356,template
+1,ppo_template_3,50.0,0.0,50.0,0.0,,20260125-051357,20260125-051356,template
