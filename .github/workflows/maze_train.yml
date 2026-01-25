@@ -27,6 +27,10 @@ on:
         description: "Extra train.py args (optional)"
         required: false
         default: ""
+      iterations_per_set:
+        description: "Parallel model lines per cycle"
+        required: false
+        default: "1"
   push:
     paths:
       - "assets/mazes/*.png"
@@ -126,7 +130,11 @@ jobs:
           if [ -z "$game" ]; then
             game="maze"
           fi
-          python train.py --game "$game" --max-cycles "$max_cycles" ${{ inputs.train_args }}
+          iters="${{ inputs.iterations_per_set }}"
+          if [ -z "$iters" ]; then
+            iters="1"
+          fi
+          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'
