@@ -10,13 +10,13 @@ code .
 
 ## 2) Python + venv
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
 ## 3) Install dependencies
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 ## 4) Run the maze workflow locally
@@ -33,5 +33,6 @@ python train.py --game maze --config configs/maze.yaml
 ```
 
 ## 5) Common issues
+- If `python` is missing, use `python3` or install `python-is-python3`.
 - If `code .` fails, install the VS Code Remote WSL extension.
 - If Tkinter is missing for `maze_game.py`, install it with: `sudo apt-get install python3-tk`.
