@@ -1,0 +1,100 @@
+{
+  "config": {
+    "train_timesteps": 300000,
+    "n_steps": 256,
+    "batch_size": 512,
+    "n_epochs": 4,
+    "gamma": 0.99,
+    "learning_rate": 0.00025,
+    "device": "auto",
+    "target_fps": 30,
+    "max_video_seconds": 30,
+    "video_steps": 600,
+    "max_cycles": 1,
+    "checkpoint_interval": 1,
+    "iterations_per_set": 6,
+    "n_envs": 8,
+    "seed": 0,
+    "deterministic": false,
+    "base_seed": 0,
+    "early_stop_patience": 3,
+    "improvement_threshold": 0.05,
+    "eval_episodes": 3,
+    "eval_video_steps": 0,
+    "long_eval_video_steps": 0,
+    "top_k_checkpoints": 3,
+    "no_checkpoint": false,
+    "individual_videos": false,
+    "cpu_affinity": null,
+    "num_threads": null,
+    "video_dir": "videos",
+    "model_dir": "models",
+    "log_dir": "logs",
+    "metrics_csv": "logs/metrics.csv",
+    "metrics_deltas": true,
+    "stream_tensorboard": false,
+    "status": false,
+    "resume_from": null,
+    "config_path": null,
+    "profile": null,
+    "dry_run": false,
+    "video_resolution": "320x192",
+    "eval_overlay": true,
+    "eval_deterministic": false,
+    "worker_watchdog": true
+  },
+  "summary": {
+    "event": "summary",
+    "best_model": "ppo_pong_custom_3",
+    "best_score": -0.6866666666665138,
+    "metrics_csv": "logs/metrics.csv",
+    "video_dir": "videos",
+    "model_dir": "models",
+    "last_combined_video": "videos/ppo_pong_combined_20260125-023857_seed0.mp4",
+    "last_eval_video": null,
+    "run_timestamp": "20260125-023857",
+    "stop_reason": "max_cycles",
+    "cycles": [
+      {
+        "cycle": 1,
+        "scores": [
+          [
+            "ppo_pong_custom_3",
+            -0.6866666666665138
+          ],
+          [
+            "ppo_pong_custom_5",
+            -2.3933333333334943
+          ],
+          [
+            "ppo_pong_custom_4",
+            -2.740000000000016
+          ],
+          [
+            "ppo_pong_custom_2",
+            -2.3599999999998866
+          ],
+          [
+            "ppo_pong_custom_1",
+            -1.733333333333454
+          ],
+          [
+            "ppo_pong_custom_0",
+            -18.726666666666834
+          ]
+        ],
+        "best_id": "ppo_pong_custom_3",
+        "best_score": -0.6866666666665138,
+        "timestamp": "20260125-023857",
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    ]
+  }
+}
