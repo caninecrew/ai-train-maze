@@ -43,6 +43,14 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+## WSL / Ubuntu CLI setup (VS Code)
+If you already have Ubuntu CLI (WSL) installed:
+1) Open the repo from WSL: `code .` inside the repo directory.
+2) Create and activate a venv:
+   - `python -m venv .venv`
+   - `source .venv/bin/activate`
+3) Install deps: `pip install -r requirements.txt`
+
 If you prefer a one-liner setup after cloning, run the bootstrap scripts:
 - Windows (PowerShell): `powershell -ExecutionPolicy Bypass -File scripts/setup_env.ps1`
 - macOS/Linux: `bash scripts/setup_env.sh`
