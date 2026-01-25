@@ -6,7 +6,7 @@ on:
       maze_id:
         description: "Maze ID (e.g., maze_001)"
         required: false
-        default: ""
+        default: "maze_001"
       rows:
         description: "Fallback rows if no per-maze config"
         required: false
@@ -22,7 +22,7 @@ on:
       max_cycles:
         description: "Training cycles"
         required: false
-        default: "5"
+        default: "1"
       train_args:
         description: "Extra train.py args (optional)"
         required: false
@@ -35,15 +35,6 @@ on:
         description: "Max steps per episode (maze env)"
         required: false
         default: "3600"
-  push:
-    paths:
-      - "assets/mazes/*.png"
-      - "assets/mazes/*.json"
-      - "scripts/mazes/convert_png_to_grid.py"
-      - "configs/**"
-      - "games/**"
-      - "train.py"
-      - "requirements.txt"
   schedule:
     - cron: "0 * * * *"
 jobs:
