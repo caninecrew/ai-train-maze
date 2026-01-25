@@ -1,56 +1,21 @@
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
-from PIL import Image, ImageDraw
+from maze_game import find_latest_maze_id, load_maze_files, render_grid_frame
 
 from games.base import GameAdapter
 
 
-def _latest_meta_path(root: Path) -> Path:
-    meta_files = list(root.glob("*/**/*_meta.json"))
-    if not meta_files:
-        raise FileNotFoundError("No maze meta files found under data/mazes.")
-    return max(meta_files, key=lambda p: p.stat().st_mtime)
-
-
-def _resolve_maze_paths() -> Dict[str, Path]:
-    base = Path("data/mazes")
+def _resolve_maze_id(maze_dir: str) -> str:
     maze_id = os.getenv("MAZE_ID", "").strip()
     if maze_id:
-        meta_path = base / maze_id / f"{maze_id}_meta.json"
-    else:
-        meta_path = _latest_meta_path(base)
-        maze_id = meta_path.stem.replace("_meta", "")
-
-    grid_path = meta_path.with_name(f"{maze_id}_grid.npy")
-    grid_xo_path = meta_path.with_name(f"{maze_id}_grid_xo.txt")
-    if not grid_path.exists() and not grid_xo_path.exists():
-        raise FileNotFoundError(f"Missing grid file: {grid_path} (or {grid_xo_path})")
-
-    return {"maze_id": maze_id, "meta": meta_path, "grid": grid_path, "grid_xo": grid_xo_path}
-
-
-def _load_grid(grid_path: Path, grid_xo_path: Path) -> np.ndarray:
-    if grid_path.exists():
-        return np.load(grid_path)
-    text = grid_xo_path.read_text(encoding="utf-8").strip().splitlines()
-    rows = len(text)
-    cols = max(len(line) for line in text) if rows else 0
-    grid = np.ones((rows, cols), dtype=np.uint8)
-    for r, line in enumerate(text):
-        for c, ch in enumerate(line):
-            if ch in ("O", "S", "G"):
-                grid[r, c] = 0
-            elif ch == "X":
-                grid[r, c] = 1
-    return grid
+        return str(maze_id).zfill(3)
+    return str(find_latest_maze_id(maze_dir)).zfill(3)
 
 
 class MazeEnv(gym.Env):
@@ -67,11 +32,10 @@ class MazeEnv(gym.Env):
         self._rng = np.random.default_rng(seed)
         self._variant = variant
 
-        paths = _resolve_maze_paths()
-        meta = json.loads(paths["meta"].read_text(encoding="utf-8"))
-        self._meta = meta
-        self._maze_id = paths["maze_id"]
-        self._grid = _load_grid(paths["grid"], paths["grid_xo"])
+        maze_dir = os.getenv("MAZE_DIR", "data/mazes")
+        maze_id = _resolve_maze_id(maze_dir)
+        self._grid, self._meta = load_maze_files(maze_dir, maze_id, prefer_npy=True)
+        self._maze_id = maze_id
         self._rows, self._cols = self._grid.shape
         max_steps_env = os.getenv("MAZE_MAX_STEPS", "").strip()
         if max_steps_env:
@@ -86,8 +50,8 @@ class MazeEnv(gym.Env):
         self._step_penalty = -0.01
         self._goal_bonus = 10.0
 
-        start = meta.get("start")
-        goal = meta.get("goal")
+        start = self._meta.get("start")
+        goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
         self._goal = self._sanitize_point(goal, fallback="goal")
         self._dist_map = self._compute_distances(self._goal)
@@ -95,11 +59,14 @@ class MazeEnv(gym.Env):
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
 
-        self._bg = None
-        self._cell_size = 10
-        self._png_path = Path(meta.get("png", ""))
-        if self._png_path and not self._png_path.is_absolute():
-            self._png_path = (Path.cwd() / self._png_path).resolve()
+        cell_size_env = os.getenv("MAZE_CELL_SIZE", "").strip()
+        if cell_size_env:
+            try:
+                self._cell_size = max(2, int(cell_size_env))
+            except ValueError:
+                self._cell_size = 8
+        else:
+            self._cell_size = 8
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
@@ -183,25 +150,6 @@ class MazeEnv(gym.Env):
     def render(self):
         if self.render_mode != "rgb_array":
             return None
-        if self._bg is None:
-            cell = self._cell_size
-            w, h = self._cols * cell, self._rows * cell
-            base = Image.new("RGB", (w, h), (255, 255, 255))
-            draw = ImageDraw.Draw(base)
-            for r in range(self._rows):
-                for c in range(self._cols):
-                    if self._grid[r, c] == 1:
-                        x0, y0 = c * cell, r * cell
-                        x1, y1 = x0 + cell, y0 + cell
-                        draw.rectangle((x0, y0, x1, y1), fill=(0, 0, 0))
-            self._bg = base
-
-        frame = self._bg.copy()
-        draw = ImageDraw.Draw(frame)
-        w, h = frame.size
-        x = (self._agent[1] + 0.5) * (w / self._cols)
-        y = (self._agent[0] + 0.5) * (h / self._rows)
-        radius = max(2, int(self._cell_size * 0.35))
         palette = [
             (0, 180, 255),
             (255, 120, 0),
@@ -215,8 +163,13 @@ class MazeEnv(gym.Env):
         color = palette[0]
         if self._variant is not None:
             color = palette[int(self._variant) % len(palette)]
-        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
-        return np.array(frame)
+        return render_grid_frame(
+            self._grid,
+            agent_pos=(self._agent[0] + 0.5, self._agent[1] + 0.5),
+            goal=self._goal,
+            cell_size=self._cell_size,
+            agent_color=color,
+        )
 
 
 def _make_env(render_mode: Optional[str], seed: Optional[int], variant: Optional[int]) -> gym.Env:
