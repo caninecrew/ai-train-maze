@@ -1,11 +1,11 @@
 # convert_png_to_grid.py
 # Usage:
-#   python convert_png_to_grid.py --png assets/maze01.png --rows 60 --cols 60 --out data/maze01
+#   python scripts/mazes/convert_png_to_grid.py --png assets/mazes/maze_001.png --rows 60 --cols 60 --out data/mazes/maze_001/maze_001
 #
 # Outputs:
-#   data/maze01_grid.npy
-#   data/maze01_grid.txt
-#   data/maze01_meta.json
+#   data/mazes/maze_001/maze_001_grid.npy
+#   data/mazes/maze_001/maze_001_grid.txt
+#   data/mazes/maze_001/maze_001_meta.json
 
 from __future__ import annotations
 
@@ -265,7 +265,7 @@ def main() -> None:
     ap.add_argument(
         "--out",
         required=True,
-        help="Output prefix path, e.g. data/maze01 (will create maze01_grid.npy, etc.)",
+        help="Output prefix path, e.g. data/mazes/maze_001/maze_001 (creates *_grid.npy, etc.)",
     )
     ap.add_argument("--start", default="", help="Optional start as r,c (e.g. 1,1).")
     ap.add_argument("--goal", default="", help="Optional goal as r,c (e.g. 58,58).")
