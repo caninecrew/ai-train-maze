@@ -22,7 +22,7 @@ Best practices and naming convention:
 - Maze IDs use `maze_###` (e.g., `maze_001`) and stay consistent across assets/data/outputs.
 - Optional per-maze config can live at `assets/mazes/maze_###.json` (rows/cols, thresholds).
 - GitHub Actions: run `maze-convert-and-train` manually to convert the latest maze and train; adjust `max_cycles` and `train_args` as needed.
-- Local training: use `scripts/mazes/train_local.ps1` (Windows) or `scripts/mazes/train_local.sh` (macOS/Linux).
+- Local training: use `scripts/mazes/train_local.ps1` (Windows) or `scripts/mazes/train_local.sh` (macOS/Linux). Set `MAZE_ID` to target a specific maze.
 
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.
@@ -55,6 +55,11 @@ python train.py --list-games
 ## Train a model
 ```
 python train.py --game template --config configs/template.yaml
+```
+
+Maze training (uses latest converted maze by default):
+```
+python train.py --game maze --config configs/maze.yaml
 ```
 
 Override with CLI flags:

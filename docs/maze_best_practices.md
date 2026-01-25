@@ -86,6 +86,7 @@ GitHub Actions automation:
 - It converts the most recent maze by default, or uses the `maze_id` input when provided.
 - Use `max_cycles` to control training length and `train_args` for extra flags.
 - Optional per-maze settings live in `assets/mazes/maze_###.json` (e.g., rows/cols, threshold).
+- Set `MAZE_ID` in your environment to train a specific maze locally.
 
 ## Scalability strategy
 - Keep grid size fixed to bound state space.

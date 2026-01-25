@@ -18,7 +18,7 @@ on:
       train_game:
         description: "Game adapter to train"
         required: false
-        default: "template"
+        default: "maze"
       max_cycles:
         description: "Training cycles"
         required: false
@@ -94,6 +94,7 @@ jobs:
             --cols "$COLS" \
             --out "$out_dir/$maze_id" \
             $cfg_arg
+          echo "MAZE_ID=$maze_id" >> "$GITHUB_ENV"
 
       - name: Commit maze outputs
         if: github.event_name != 'pull_request'
