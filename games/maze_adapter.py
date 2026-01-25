@@ -52,7 +52,7 @@ class MazeEnv(gym.Env):
         self._rows, self._cols = self._grid.shape
         self._max_steps = int(self._rows * self._cols * 2)
         self._step_count = 0
-        self._wall_penalty = -5.0
+        self._wall_penalty = -500.0
 
         start = meta.get("start")
         goal = meta.get("goal")
