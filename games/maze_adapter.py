@@ -69,7 +69,7 @@ class MazeEnv(gym.Env):
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
 
         self._bg = None
-        self._walls = None
+        self._cell_size = 10
         self._png_path = Path(meta.get("png", ""))
         if self._png_path and not self._png_path.is_absolute():
             self._png_path = (Path.cwd() / self._png_path).resolve()
@@ -132,27 +132,24 @@ class MazeEnv(gym.Env):
         if self.render_mode != "rgb_array":
             return None
         if self._bg is None:
-            if not self._png_path.exists():
-                raise FileNotFoundError(f"Maze PNG not found: {self._png_path}")
-            img = Image.open(self._png_path).convert("RGBA")
-            bbox = self._meta.get("trim_bbox")
-            if bbox and len(bbox) == 4:
-                img = img.crop(tuple(int(v) for v in bbox))
-            bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
-            composed = Image.alpha_composite(bg, img)
-            self._bg = composed.convert("RGB")
-            gray = composed.convert("L")
-            wall_mask = gray.point(lambda p: 255 if p < 128 else 0)
-            walls = Image.new("RGBA", composed.size, (0, 0, 0, 0))
-            walls.paste(composed, mask=wall_mask)
-            self._walls = walls
+            cell = self._cell_size
+            w, h = self._cols * cell, self._rows * cell
+            base = Image.new("RGB", (w, h), (255, 255, 255))
+            draw = ImageDraw.Draw(base)
+            for r in range(self._rows):
+                for c in range(self._cols):
+                    if self._grid[r, c] == 1:
+                        x0, y0 = c * cell, r * cell
+                        x1, y1 = x0 + cell, y0 + cell
+                        draw.rectangle((x0, y0, x1, y1), fill=(0, 0, 0))
+            self._bg = base
 
         frame = self._bg.copy()
         draw = ImageDraw.Draw(frame)
         w, h = frame.size
         x = (self._agent[1] + 0.5) * (w / self._cols)
         y = (self._agent[0] + 0.5) * (h / self._rows)
-        radius = max(2, int(min(w / self._cols, h / self._rows) * 0.35))
+        radius = max(2, int(self._cell_size * 0.35))
         palette = [
             (0, 180, 255),
             (255, 120, 0),
@@ -167,8 +164,6 @@ class MazeEnv(gym.Env):
         if self._variant is not None:
             color = palette[int(self._variant) % len(palette)]
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
-        if self._walls is not None:
-            frame = Image.alpha_composite(frame.convert("RGBA"), self._walls).convert("RGB")
         return np.array(frame)
 
 
