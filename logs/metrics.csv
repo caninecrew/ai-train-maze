@@ -1,0 +1,2 @@
+cycle,model_id,avg_reward,avg_reward_ci,win_rate,avg_return_rate,avg_return_rate_ci,avg_rally_length,delta_reward,timestamp,run_timestamp
+1,ppo_pong_custom_0,-16.37333333333439,1.1429412661101173,0.0,1.0,0.0,350.26190476190476,,20260125-013412,20260125-013411
