@@ -1,0 +1,18 @@
+{
+  "png": "maze_2a0da5114f562560c097d58728316ed0.png",
+  "rows": 60,
+  "cols": 60,
+  "threshold": -1,
+  "open_ratio": 0.55,
+  "method": "patch",
+  "invert": false,
+  "auto_invert": true,
+  "trim": true,
+  "trim_tol": 5,
+  "start": null,
+  "goal": null,
+  "encoding": {
+    "open": 0,
+    "wall": 1
+  }
+}
