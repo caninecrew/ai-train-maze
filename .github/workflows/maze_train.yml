@@ -118,7 +118,11 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: |
           mkdir -p videos models logs
-          python train.py --game "${{ inputs.train_game }}" --max-cycles "${{ inputs.max_cycles }}" ${{ inputs.train_args }}
+          max_cycles="${{ inputs.max_cycles }}"
+          if [ -z "$max_cycles" ]; then
+            max_cycles="1"
+          fi
+          python train.py --game "${{ inputs.train_game }}" --max-cycles "$max_cycles" ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'
