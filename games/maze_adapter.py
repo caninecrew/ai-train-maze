@@ -178,6 +178,9 @@ class MazeEnv(gym.Env):
             agent_color=color,
         )
 
+    def get_agent_cell(self) -> tuple[int, int]:
+        return self._agent
+
 
 def _make_env(render_mode: Optional[str], seed: Optional[int], variant: Optional[int]) -> gym.Env:
     env = MazeEnv(render_mode=render_mode, seed=seed, variant=variant)

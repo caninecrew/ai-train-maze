@@ -65,13 +65,18 @@ def _resolve_affinity_list(cpu_affinity: Optional[str], n_envs: int) -> Optional
         return None
 
 
-def _add_overlay(frame: np.ndarray, text: str) -> np.ndarray:
-    if not text:
+def _add_overlay(frame: np.ndarray, text: str, footer: str = "") -> np.ndarray:
+    if not text and not footer:
         return frame
     img = Image.fromarray(frame)
     drawer = ImageDraw.Draw(img)
-    drawer.rectangle([(0, 0), (img.width, 26)], fill=(0, 0, 0))
-    drawer.text((6, 6), text, fill=(255, 255, 255))
+    if text:
+        drawer.rectangle([(0, 0), (img.width, 26)], fill=(0, 0, 0))
+        drawer.text((6, 6), text, fill=(255, 255, 255))
+    if footer:
+        y0 = img.height - 24
+        drawer.rectangle([(0, y0), (img.width, img.height)], fill=(0, 0, 0))
+        drawer.text((6, y0 + 4), footer, fill=(255, 255, 255))
     return np.array(img)
 
 
@@ -99,7 +104,14 @@ def record_video_segment(
             if resample is None:
                 resample = getattr(Image, "NEAREST", 0)
             img = img.resize(target_size, resample=resample)
-        frames.append(_add_overlay(np.array(img), overlay_text))
+        footer = ""
+        try:
+            if hasattr(env, "get_agent_cell"):
+                r, c = env.get_agent_cell()
+                footer = f"agent=({r},{c})"
+        except Exception:
+            footer = ""
+        frames.append(_add_overlay(np.array(img), overlay_text, footer=footer))
 
     for _ in range(steps):
         action, _ = model.predict(obs, deterministic=True)
@@ -112,7 +124,14 @@ def record_video_segment(
                 if resample is None:
                     resample = getattr(Image, "NEAREST", 0)
                 img = img.resize(target_size, resample=resample)
-            frames.append(_add_overlay(np.array(img), overlay_text))
+            footer = ""
+            try:
+                if hasattr(env, "get_agent_cell"):
+                    r, c = env.get_agent_cell()
+                    footer = f"agent=({r},{c})"
+            except Exception:
+                footer = ""
+            frames.append(_add_overlay(np.array(img), overlay_text, footer=footer))
         if terminated or truncated:
             obs, _ = env.reset()
 
