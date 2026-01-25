@@ -378,6 +378,39 @@ def main() -> None:
     xo_path = out_prefix.with_name(out_prefix.name + "_grid_xo.txt")
     xo_path.write_text(grid_to_xo(grid, start=start, goal=goal), encoding="utf-8")
 
+    rows, cols = grid.shape
+    if start is None:
+        if grid[0, 0] == 0:
+            start = (0, 0)
+        else:
+            opens = np.argwhere(grid == 0)
+            if opens.size == 0:
+                raise ValueError("Maze has no open cells.")
+            start = tuple(int(x) for x in opens[0])
+    if goal is None:
+        if grid[rows - 1, cols - 1] == 0:
+            goal = (rows - 1, cols - 1)
+        else:
+            dist = np.full((rows, cols), -1, dtype=np.int32)
+            sr, sc = start
+            dist[sr, sc] = 0
+            queue = [(sr, sc)]
+            qi = 0
+            while qi < len(queue):
+                r, c = queue[qi]
+                qi += 1
+                for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < rows and 0 <= cc < cols:
+                        if grid[rr, cc] == 0 and dist[rr, cc] < 0:
+                            dist[rr, cc] = dist[r, c] + 1
+                            queue.append((rr, cc))
+            max_dist = dist.max()
+            if max_dist < 0:
+                raise ValueError("Start is isolated; no reachable goal cells.")
+            gr, gc = np.argwhere(dist == max_dist)[0]
+            goal = (int(gr), int(gc))
+
     # Save metadata
     meta_path = out_prefix.with_name(out_prefix.name + "_meta.json")
     meta = {

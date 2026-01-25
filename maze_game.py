@@ -281,16 +281,8 @@ def _auto_pick_start_goal(
             border_opens.append((rr, cc))
 
     if start is None:
-        interior = [
-            (int(r), int(c))
-            for r, c in open_cells
-            if r not in (0, rows - 1) and c not in (0, cols - 1)
-        ]
-        if interior:
-            start = interior[0]
-        elif border_opens:
-            sr, sc = min(border_opens, key=lambda x: (x[0] + x[1], x[0], x[1]))
-            start = (sr, sc)
+        if grid[0, 0] == 0:
+            start = (0, 0)
         else:
             sr, sc = open_cells[0]
             start = (int(sr), int(sc))
@@ -298,12 +290,8 @@ def _auto_pick_start_goal(
         sr, sc = start
 
     if goal is None:
-        if border_opens:
-            gr, gc = max(
-                border_opens,
-                key=lambda x: (x[0] + x[1], x[0], x[1]),
-            )
-            goal = (gr, gc)
+        if grid[rows - 1, cols - 1] == 0:
+            goal = (rows - 1, cols - 1)
         else:
             dist = np.full((rows, cols), -1, dtype=np.int32)
             dist[sr, sc] = 0

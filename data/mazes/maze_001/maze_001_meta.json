@@ -16,8 +16,14 @@
     302,
     302
   ],
-  "start": null,
-  "goal": null,
+  "start": [
+    0,
+    1
+  ],
+  "goal": [
+    1,
+    13
+  ],
   "encoding": {
     "open": 0,
     "wall": 1
