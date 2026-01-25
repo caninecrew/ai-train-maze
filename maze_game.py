@@ -567,7 +567,7 @@ class MazeGame:
 
 def main():
     parser = argparse.ArgumentParser(description="Playable Tkinter Maze Game")
-    parser.add_argument("--maze_dir", type=str, default=".",
+    parser.add_argument("--maze_dir", type=str, default="data/mazes",
                         help="Folder containing maze_###_*.{npy,txt,json}")
     parser.add_argument("--maze_id", type=int, default=None,
                         help="Maze number, e.g., 1 => maze_001_* (default: latest)")
