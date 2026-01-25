@@ -10,7 +10,7 @@ from games.registry import get_game, list_games
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a trained PPO checkpoint.")
-    parser.add_argument("--game", type=str, default="pong", help="Game key to evaluate.")
+    parser.add_argument("--game", type=str, default="template", help="Game key to evaluate.")
     parser.add_argument("--model-path", type=str, default=None, help="Path to the PPO checkpoint to evaluate.")
     parser.add_argument("--episodes", type=int, default=5, help="Number of evaluation episodes.")
     parser.add_argument("--render", action="store_true", help="Render a human-visible window during evaluation.")

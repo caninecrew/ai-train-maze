@@ -4,8 +4,7 @@ torch>=2.1
 gymnasium>=0.29
 numpy>=1.26
 
-# Game/visualization
-pygame>=2.5
+# Visualization
 pillow>=10.0.0
 imageio>=2.31
 imageio-ffmpeg>=0.4.9

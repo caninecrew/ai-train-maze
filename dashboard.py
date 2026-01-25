@@ -86,7 +86,7 @@ def _resolve_game_context(log_dir: Path) -> Dict[str, str]:
     report = _latest_report_info(log_dir)
     config = report.get("config", {})
     summary = report.get("summary", {})
-    game = config.get("game") or summary.get("game") or "pong"
+    game = config.get("game") or summary.get("game") or "template"
     model_prefix = summary.get("model_prefix") or config.get("model_prefix") or ""
     return {"game": game, "model_prefix": model_prefix}
 
@@ -312,7 +312,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/heatmap":
             log_dir = ROOT / "logs"
             game_context = _resolve_game_context(log_dir)
-            game_name = game_context.get("game", "pong")
+            game_name = game_context.get("game", "template")
             model_prefix = game_context.get("model_prefix")
             model_path = ROOT / "models" / f"{model_prefix}_latest.zip" if model_prefix else ROOT / "models" / "latest.zip"
             best = _read_metrics(ROOT / "logs" / "metrics.csv")

@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Dict, List
 
 from games.base import GameAdapter
-from games.pong_adapter import pong_adapter
+from games.template_adapter import template_adapter
 
 
 _REGISTRY: Dict[str, GameAdapter] = {
-    "pong": pong_adapter(),
+    "template": template_adapter(),
 }
 
 

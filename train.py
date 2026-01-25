@@ -177,7 +177,7 @@ def _safe_write_video(frames: List[np.ndarray], path: Path, fps: int, final_over
 
 @dataclass
 class TrainConfig:
-    game: str = "pong"
+    game: str = "template"
     model_prefix: Optional[str] = None
     train_timesteps: int = 300_000
     n_steps: int = 256

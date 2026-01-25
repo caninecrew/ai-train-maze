@@ -1,18 +1,13 @@
 # AI Training Base
 
-A game-agnostic PPO training base with a modular game registry. Pong remains as the reference game adapter, but the repo is organized so you can add new games quickly without rewriting the training loop.
+A game-agnostic PPO training base with a modular adapter registry. This repo is a starting point for training an AI on your own environment.
 
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.
 - `eval.py`: evaluate one or more checkpoints for any registered game.
 - `dashboard.py`: live metrics dashboard that reads `logs/` outputs.
 - `games/`: game adapters that expose gym-compatible environments.
-- `pong.py`: the example game environment (pygame).
 - `tests/`: smoke tests and environment checks.
-
-Compatibility wrappers:
-- `train_pong_ppo.py`: forwards to `train.py`.
-- `eval_pong.py`: forwards to `eval.py`.
 
 ## Requirements
 - Python 3.9+
@@ -36,7 +31,7 @@ python train.py --list-games
 
 ## Train a model
 ```
-python train.py --game pong --config configs/pong.yaml
+python train.py --game template --config configs/base.yaml
 ```
 
 Override with CLI flags:
@@ -51,7 +46,7 @@ Artifacts and outputs:
 
 ## Evaluate a model
 ```
-python eval.py --game pong --model-path models/ppo_pong_custom_latest.zip --episodes 5
+python eval.py --game template --model-path models/ppo_template_latest.zip --episodes 5
 ```
 
 Optional flags:
@@ -66,9 +61,9 @@ python dashboard.py
 Then open `http://127.0.0.1:8000`.
 
 ## Common recipes
-- Quick smoke (headless, short): `python train.py --game pong --profile quick --max-cycles 1 --dry-run`
-- 1-2 minute videos: `python train.py --game pong --video-steps 3600 --max-video-seconds 120 --target-fps 30 --individual-videos`
-- GPU profile: `python train.py --game pong --profile gpu --iterations-per-set 2 --n-envs 16 --stream-tensorboard`
+- Quick smoke (headless, short): `python train.py --game template --profile quick --max-cycles 1 --dry-run`
+- 1-2 minute videos: `python train.py --game template --video-steps 3600 --max-video-seconds 120 --target-fps 30 --individual-videos`
+- GPU profile: `python train.py --game template --profile gpu --iterations-per-set 2 --n-envs 16 --stream-tensorboard`
 - Status check: `python train.py --status`
 
 ## Add a new game
@@ -79,7 +74,6 @@ Then open `http://127.0.0.1:8000`.
 5) Add a config in `configs/` for your new game.
 
 ## Tests
-- Quick checks: `python -m pytest tests/test_pong_env.py`
 - Training pipeline tests (skip the slow test): `python -m pytest tests/test_train_pipeline.py -m "not slow"`
 - Include slow training smoke test: `python -m pytest tests/test_train_pipeline.py -m slow`
 

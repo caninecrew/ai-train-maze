@@ -7,7 +7,7 @@ import pytest
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from games.pong_adapter import SB3PongEnv
+from games.registry import get_game
 from train import (
     build_grid_frames,
     _add_overlay,
@@ -18,14 +18,15 @@ from train import (
 )
 
 
-def test_sb3_pong_env_rollout():
-    env = SB3PongEnv(render_mode=None)
+def test_env_rollout():
+    game = get_game("template")
+    env = game.make_env(render_mode=None)
     obs, info = env.reset(seed=123)
-    assert obs.shape == (6,)
+    assert obs.shape[0] >= 1
     next_obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
-    assert next_obs.shape == (6,)
+    assert next_obs.shape[0] >= 1
     assert isinstance(reward, float)
-    assert terminated is False
+    assert terminated in (True, False)
     assert truncated in (True, False)
     env.close()
 
@@ -110,7 +111,7 @@ def test_train_single_smoke(tmp_path):
         video_dir=str(tmp_path / "videos"),
         metrics_csv=str(tmp_path / "logs" / "metrics.csv"),
     )
-    model_id, metrics, timestamp, latest_path, stamped = _train_single("smoke_model", "pong", cfg, seed=123)
+    model_id, metrics, timestamp, latest_path, stamped = _train_single("smoke_model", "template", cfg, seed=123)
     assert model_id == "smoke_model"
     assert "avg_reward" in metrics
     assert Path(latest_path).exists()

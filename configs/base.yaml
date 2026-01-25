@@ -1,5 +1,5 @@
 defaults:
-  game: pong
+  game: template
   train_timesteps: 300000
   n_steps: 256
   batch_size: 512
