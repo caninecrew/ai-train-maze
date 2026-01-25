@@ -5,3 +5,4 @@ defaults:
   max_video_seconds: 20
   target_fps: 30
   max_cycles: 5
+  video_resolution: "600x600"
