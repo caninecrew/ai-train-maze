@@ -79,6 +79,10 @@ Recommended layout:
 Converter location:
 - `scripts/mazes/convert_png_to_grid.py`
 
+GitHub Actions automation:
+- The `maze-convert` workflow regenerates grids on push when a maze PNG changes.
+- Add a new maze as `assets/mazes/maze_###.png` and CI will write `data/mazes/maze_###/*`.
+
 ## Scalability strategy
 - Keep grid size fixed to bound state space.
 - Cache conversion and distance maps.
