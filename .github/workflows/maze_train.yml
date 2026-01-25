@@ -27,6 +27,17 @@ on:
         description: "Extra train.py args (optional)"
         required: false
         default: ""
+  push:
+    paths:
+      - "assets/mazes/*.png"
+      - "assets/mazes/*.json"
+      - "scripts/mazes/convert_png_to_grid.py"
+      - "configs/**"
+      - "games/**"
+      - "train.py"
+      - "requirements.txt"
+  schedule:
+    - cron: "0 * * * *"
 jobs:
   convert_and_train:
     runs-on: ubuntu-latest
