@@ -34,6 +34,13 @@ jobs:
         run: |
           python -m pytest -q
 
+      - name: Generate training artifacts
+        env:
+          SDL_VIDEODRIVER: dummy
+        run: |
+          mkdir -p videos models logs
+          python train_pong_ppo.py --profile quick --max-cycles 1 --iterations-per-set 1 --n-envs 1 --video-steps 120 --max-video-seconds 4 --individual-videos --checkpoint-interval 0
+
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
