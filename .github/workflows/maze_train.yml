@@ -22,7 +22,7 @@ on:
       max_cycles:
         description: "Training cycles"
         required: false
-        default: "5"
+        default: "1"
       train_args:
         description: "Extra train.py args (optional)"
         required: false
