@@ -93,14 +93,26 @@ def record_video_segment(
 
     frame = env.render()
     if frame is not None:
-        frames.append(_add_overlay(np.array(Image.fromarray(frame).resize(target_size)), overlay_text))
+        img = Image.fromarray(frame)
+        if img.size != target_size:
+            resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
+            if resample is None:
+                resample = getattr(Image, "NEAREST", 0)
+            img = img.resize(target_size, resample=resample)
+        frames.append(_add_overlay(np.array(img), overlay_text))
 
     for _ in range(steps):
         action, _ = model.predict(obs, deterministic=True)
         obs, _, terminated, truncated, _ = env.step(action)
         frame = env.render()
         if frame is not None:
-            frames.append(_add_overlay(np.array(Image.fromarray(frame).resize(target_size)), overlay_text))
+            img = Image.fromarray(frame)
+            if img.size != target_size:
+                resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
+                if resample is None:
+                    resample = getattr(Image, "NEAREST", 0)
+                img = img.resize(target_size, resample=resample)
+            frames.append(_add_overlay(np.array(img), overlay_text))
         if terminated or truncated:
             obs, _ = env.reset()
 
