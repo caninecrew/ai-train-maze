@@ -2,6 +2,21 @@
 
 A game-agnostic PPO training base with a modular adapter registry. This repo is a starting point for training an AI on your own environment.
 
+## Maze-solving pipeline
+This repo can power a maze-solving AI system that separates three concerns: maze design, fast training/solving, and visual playback.
+
+What it does:
+- Maze input (human-friendly): design a maze as a PNG so you can edit walls visually.
+- Conversion (training-friendly): convert the PNG into a compact grid (wall/open) and cache it.
+- Fast solving/training: run on the fixed-size grid to keep the state space small; use shaping, imitation, or BFS/A* for near-instant paths.
+- Visual output: render a video by overlaying the agent path on the original PNG and export an MP4.
+
+Deliverables:
+- `maze.png`: the visual maze you designed.
+- `maze_grid.npy` or `.txt`: the AI-readable grid.
+- `meta.json`: grid size plus start/goal.
+- `run.mp4`: the character moving through the original maze image.
+
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.
 - `eval.py`: evaluate one or more checkpoints for any registered game.
