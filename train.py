@@ -559,6 +559,24 @@ def _best_checkpoint_from_metrics(cfg: TrainConfig, model_prefix: str) -> Option
     candidate = Path(cfg.model_dir) / f"{model_id}_latest.zip"
     return str(candidate) if candidate.exists() else None
 
+
+def _git_commit_artifacts(cfg: TrainConfig, message: str) -> None:
+    if os.getenv("CI", "").lower() != "true":
+        return
+    try:
+        if os.system("git rev-parse --is-inside-work-tree > /dev/null 2>&1") != 0:
+            return
+        os.system('git config user.name "github-actions[bot]"')
+        os.system('git config user.email "github-actions[bot]@users.noreply.github.com"')
+        os.system("git pull --rebase --autostash")
+        os.system(f'git add "{cfg.model_dir}" "{cfg.video_dir}" "{cfg.log_dir}" || true')
+        if os.system("git diff --cached --quiet") == 0:
+            return
+        os.system(f'git commit -m "{message}"')
+        os.system("git push")
+    except Exception:
+        pass
+
 def evaluate_model(game, model: PPO, episodes: int, deterministic: bool = True) -> Dict[str, float]:
     return game.evaluate(model, episodes, deterministic)
 
@@ -895,6 +913,7 @@ def main():
                     )
                     + "\n"
                 )
+            _git_commit_artifacts(cfg, f"Update training outputs (cycle {cycle})")
 
             metrics_csv_exists = metrics_csv_path.exists()
             with metrics_csv_path.open("a", newline="", encoding="utf-8") as csvfile:
