@@ -7,6 +7,7 @@ A game-agnostic PPO training base with a modular adapter registry. This repo is 
 - `eval.py`: evaluate one or more checkpoints for any registered game.
 - `dashboard.py`: live metrics dashboard that reads `logs/` outputs.
 - `games/`: game adapters that expose gym-compatible environments.
+- `docs/`: how-tos and adapter examples.
 - `tests/`: smoke tests and environment checks.
 
 ## Requirements
@@ -31,7 +32,7 @@ python train.py --list-games
 
 ## Train a model
 ```
-python train.py --game template --config configs/base.yaml
+python train.py --game template --config configs/template.yaml
 ```
 
 Override with CLI flags:
@@ -65,6 +66,7 @@ Then open `http://127.0.0.1:8000`.
 - 1-2 minute videos: `python train.py --game template --video-steps 3600 --max-video-seconds 120 --target-fps 30 --individual-videos`
 - GPU profile: `python train.py --game template --profile gpu --iterations-per-set 2 --n-envs 16 --stream-tensorboard`
 - Status check: `python train.py --status`
+- Export resolved config: `python train.py --export-config logs/resolved_config.json`
 
 ## Add a new game
 1) Create a gym-compatible environment (or wrapper) for your game.
@@ -72,10 +74,12 @@ Then open `http://127.0.0.1:8000`.
 3) Register the adapter in `games/registry.py`.
 4) Optionally add extra metrics in the adapter's `extra_metrics`.
 5) Add a config in `configs/` for your new game.
+6) See `docs/quick_guide.md` and `games/README.md` for examples.
 
 ## Tests
 - Training pipeline tests (skip the slow test): `python -m pytest tests/test_train_pipeline.py -m "not slow"`
 - Include slow training smoke test: `python -m pytest tests/test_train_pipeline.py -m slow`
+- Adapter contract test: `python -m pytest tests/test_adapter_contract.py`
 
 ## Troubleshooting
 - Progress bars: install `pip install rich tqdm` (or `pip install stable-baselines3[extra]`) to enable progress output.

@@ -1,0 +1,19 @@
+defaults:
+  game: template
+  model_prefix: ppo_template
+  train_timesteps: 50000
+  n_envs: 4
+  eval_episodes: 3
+  video_steps: 600
+  max_video_seconds: 30
+  max_cycles: 3
+profiles:
+  quick:
+    train_timesteps: 5000
+    iterations_per_set: 1
+    max_cycles: 1
+    eval_episodes: 1
+    video_steps: 200
+    max_video_seconds: 10
+    checkpoint_interval: 0
+    no_checkpoint: true

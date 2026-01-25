@@ -222,6 +222,7 @@ class TrainConfig:
     eval_deterministic: bool = False
     worker_watchdog: bool = True
     list_games: bool = False
+    export_config: Optional[str] = None
 
     @property
     def max_video_frames(self) -> int:
@@ -335,6 +336,7 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--game", type=str, default=defaults_from_file.get("game", TrainConfig.game), help="Game key to train.")
     parser.add_argument("--model-prefix", type=str, default=defaults_from_file.get("model_prefix", TrainConfig.model_prefix), help="Prefix for model ids.")
     parser.add_argument("--list-games", action="store_true", help="List available games and exit.")
+    parser.add_argument("--export-config", type=str, default=defaults_from_file.get("export_config", TrainConfig.export_config), help="Write resolved config to JSON and exit.")
     parser.add_argument("--status", action="store_true", default=defaults_from_file.get("status", False), help="Show current best status and exit.")
     parser.add_argument("--train-timesteps", type=int, default=defaults_from_file.get("train_timesteps", TrainConfig.train_timesteps))
     parser.add_argument("--n-steps", type=int, default=defaults_from_file.get("n_steps", TrainConfig.n_steps))
@@ -420,6 +422,7 @@ def parse_args() -> TrainConfig:
         eval_deterministic=args.eval_deterministic,
         worker_watchdog=args.worker_watchdog,
         list_games=args.list_games,
+        export_config=args.export_config,
     )
     _apply_profile(cfg)
     if cfg.video_steps > cfg.max_video_frames:
@@ -575,6 +578,12 @@ def main():
         print("Available games:")
         for game in list_games():
             print(f"- {game.name}: {game.description}")
+        return
+    if cfg.export_config:
+        export_path = Path(cfg.export_config)
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        export_path.write_text(json.dumps(asdict(cfg), indent=2))
+        print(f"Wrote resolved config to {export_path}")
         return
     game = get_game(cfg.game)
     model_prefix = cfg.model_prefix or game.model_prefix
