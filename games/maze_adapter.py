@@ -346,6 +346,8 @@ class MazeEnv(gym.Env):
         return self._agent
 
     def get_eval_stats(self) -> Dict[str, float]:
+        r, c = self._agent
+        gr, gc = self._goal
         return {
             "goal_reached": float(self._agent == self._goal),
             "best_dist": float(self._best_dist),
@@ -357,6 +359,10 @@ class MazeEnv(gym.Env):
             "novel_steps": float(self._novel_steps),
             "unique_cells": float(len(self._visited)),
             "final_dist": float(self._dist_at(self._agent)),
+            "final_row": float(r),
+            "final_col": float(c),
+            "goal_row": float(gr),
+            "goal_col": float(gc),
         }
 
 
@@ -374,6 +380,8 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
     novel_steps: List[float] = []
     unique_cells: List[float] = []
     final_dist: List[float] = []
+    final_rows: List[float] = []
+    final_cols: List[float] = []
     wall_hit_rate: List[float] = []
     idle_rate: List[float] = []
     backtrack_rate: List[float] = []
@@ -402,6 +410,8 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         novel_steps.append(float(stats.get("novel_steps", 0.0)))
         unique_cells.append(float(stats.get("unique_cells", 0.0)))
         final_dist.append(float(stats.get("final_dist", 0.0)))
+        final_rows.append(float(stats.get("final_row", np.nan)))
+        final_cols.append(float(stats.get("final_col", np.nan)))
         denom = float(stats.get("steps", ep_steps)) or 1.0
         wall_hit_rate.append(float(stats.get("wall_hits", 0.0)) / denom)
         idle_rate.append(float(stats.get("idle_steps", 0.0)) / denom)
@@ -432,6 +442,8 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         "novel_steps": float(np.mean(novel_steps)) if novel_steps else 0.0,
         "unique_cells": float(np.mean(unique_cells)) if unique_cells else 0.0,
         "final_dist": float(np.mean(final_dist)) if final_dist else 0.0,
+        "final_row": float(np.nanmean(final_rows)) if final_rows else float("nan"),
+        "final_col": float(np.nanmean(final_cols)) if final_cols else float("nan"),
         "wall_hit_rate": float(np.mean(wall_hit_rate)) if wall_hit_rate else 0.0,
         "idle_rate": float(np.mean(idle_rate)) if idle_rate else 0.0,
         "backtrack_rate": float(np.mean(backtrack_rate)) if backtrack_rate else 0.0,
@@ -469,11 +481,15 @@ def maze_adapter() -> GameAdapter:
             "backtracks",
             "novel_steps",
             "unique_cells",
-            "final_dist",
-            "wall_hit_rate",
-            "idle_rate",
-            "backtrack_rate",
-            "novel_rate",
+        "final_dist",
+        "final_row",
+        "final_col",
+        "goal_row",
+        "goal_col",
+        "wall_hit_rate",
+        "idle_rate",
+        "backtrack_rate",
+        "novel_rate",
         ],
         eval_fn=_evaluate_maze,
         heatmap_fn=None,
