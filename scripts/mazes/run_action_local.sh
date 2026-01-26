@@ -28,6 +28,11 @@ export MAZE_TRAIN_MODE="$TRAIN_MODE"
 export MAZE_TRAIN_AUTO="$TRAIN_AUTO"
 export MAZE_TRAIN_GOAL="$TRAIN_GOAL"
 export MAZE_TRAIN_GOAL_FRACTION="$TRAIN_GOAL_FRACTION"
+export MAZE_MOVE_BONUS="${MAZE_MOVE_BONUS:-0.0}"
+export MAZE_COOKIE_BONUS="${MAZE_COOKIE_BONUS:-0.03}"
+export MAZE_SHAPING_COEF="${MAZE_SHAPING_COEF:-0.2}"
+export MAZE_NOVELTY_BONUS="${MAZE_NOVELTY_BONUS:-0.02}"
+export MAZE_BACKTRACK_PENALTY="${MAZE_BACKTRACK_PENALTY:--0.4}"
 export TRAIN_DISABLE_GIT="true"
 export TRAIN_WORKER_TIMEOUT="1200"
 export TRAIN_NO_MULTIPROC="true"
@@ -73,7 +78,7 @@ if [ -n "$best_resume" ]; then
 fi
 
 if [ -z "$TRAIN_ARGS" ]; then
-  TRAIN_ARGS="--n-steps 512 --batch-size 1024 --n-epochs 3 --video-steps 600 --max-video-seconds 20 --target-fps 30 --individual-videos"
+  TRAIN_ARGS="--n-steps 512 --batch-size 1024 --n-epochs 3 --video-steps 600 --max-video-seconds 20 --target-fps 30"
 fi
 
 python3 train.py \

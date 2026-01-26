@@ -93,6 +93,24 @@ class MazeEnv(gym.Env):
                 self._cookie_bonus = float(cookie_bonus_env)
             except ValueError:
                 self._cookie_bonus = 0.05
+        shaping_coef_env = os.getenv("MAZE_SHAPING_COEF", "").strip()
+        if shaping_coef_env:
+            try:
+                self._shaping_coef = float(shaping_coef_env)
+            except ValueError:
+                self._shaping_coef = 0.1
+        novelty_bonus_env = os.getenv("MAZE_NOVELTY_BONUS", "").strip()
+        if novelty_bonus_env:
+            try:
+                self._novelty_bonus = float(novelty_bonus_env)
+            except ValueError:
+                self._novelty_bonus = 0.02
+        backtrack_penalty_env = os.getenv("MAZE_BACKTRACK_PENALTY", "").strip()
+        if backtrack_penalty_env:
+            try:
+                self._backtrack_penalty = float(backtrack_penalty_env)
+            except ValueError:
+                self._backtrack_penalty = -0.2
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
