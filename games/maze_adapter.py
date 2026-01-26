@@ -54,6 +54,7 @@ class MazeEnv(gym.Env):
         self._step_penalty = -0.001
         self._goal_bonus = 500.0
         self._idle_penalty = -0.005
+        self._move_bonus = 0.01
         self._shaping_coef = 0.1
         self._novelty_bonus = 0.02
         self._backtrack_penalty = -0.2
@@ -79,6 +80,12 @@ class MazeEnv(gym.Env):
                 self._cell_size = 8
         else:
             self._cell_size = 8
+        move_bonus_env = os.getenv("MAZE_MOVE_BONUS", "").strip()
+        if move_bonus_env:
+            try:
+                self._move_bonus = float(move_bonus_env)
+            except ValueError:
+                self._move_bonus = 0.01
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
@@ -154,6 +161,7 @@ class MazeEnv(gym.Env):
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
             self._consec_wall_hits = 0
+            reward += self._move_bonus
             new_dist = self._dist_at(self._agent)
             if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
