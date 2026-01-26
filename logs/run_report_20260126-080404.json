@@ -1,0 +1,186 @@
+{
+  "config": {
+    "game": "maze",
+    "model_prefix": null,
+    "train_timesteps": 40000,
+    "n_steps": 256,
+    "batch_size": 512,
+    "n_epochs": 4,
+    "gamma": 0.99,
+    "learning_rate": 0.00025,
+    "device": "cpu",
+    "target_fps": 30,
+    "max_video_seconds": 30,
+    "video_steps": 600,
+    "max_cycles": 6,
+    "checkpoint_interval": 1,
+    "iterations_per_set": 2,
+    "n_envs": 4,
+    "seed": 0,
+    "deterministic": false,
+    "base_seed": 0,
+    "early_stop_patience": 9999,
+    "improvement_threshold": 0.05,
+    "eval_episodes": 3,
+    "eval_video_steps": 0,
+    "long_eval_video_steps": 0,
+    "top_k_checkpoints": 3,
+    "no_checkpoint": false,
+    "individual_videos": false,
+    "cpu_affinity": null,
+    "num_threads": null,
+    "video_dir": "videos",
+    "model_dir": "models",
+    "log_dir": "logs",
+    "metrics_csv": "logs/metrics.csv",
+    "metrics_deltas": true,
+    "stream_tensorboard": false,
+    "status": false,
+    "resume_from": "models/ppo_maze_1_latest.zip",
+    "config_path": null,
+    "profile": null,
+    "dry_run": false,
+    "video_resolution": "480x480",
+    "eval_overlay": true,
+    "eval_deterministic": false,
+    "worker_watchdog": true,
+    "list_games": false,
+    "export_config": null
+  },
+  "summary": {
+    "event": "summary",
+    "game": "maze",
+    "model_prefix": "ppo_maze",
+    "best_model": "ppo_maze_1",
+    "best_score": -22.0,
+    "metrics_csv": "logs/metrics.csv",
+    "video_dir": "videos",
+    "model_dir": "models",
+    "last_combined_video": "videos/ppo_maze_combined_20260126-080606_seed0.mp4",
+    "last_eval_video": null,
+    "run_timestamp": "20260126-080404",
+    "stop_reason": "max_cycles",
+    "cycles": [
+      {
+        "cycle": 1,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -22.666666666666668
+          ],
+          [
+            "ppo_maze_1",
+            -29.666666666666668
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -22.666666666666668,
+        "timestamp": "20260126-080413",
+        "seeds": [
+          1,
+          2
+        ]
+      },
+      {
+        "cycle": 2,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -26.333333333333332
+          ],
+          [
+            "ppo_maze_1",
+            -26.0
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -26.0,
+        "timestamp": "20260126-080436",
+        "seeds": [
+          2,
+          3
+        ]
+      },
+      {
+        "cycle": 3,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -34.666666666666664
+          ],
+          [
+            "ppo_maze_1",
+            -29.666666666666668
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -29.666666666666668,
+        "timestamp": "20260126-080459",
+        "seeds": [
+          3,
+          4
+        ]
+      },
+      {
+        "cycle": 4,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -22.666666666666668
+          ],
+          [
+            "ppo_maze_1",
+            -26.0
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -22.666666666666668,
+        "timestamp": "20260126-080521",
+        "seeds": [
+          4,
+          5
+        ]
+      },
+      {
+        "cycle": 5,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -23.0
+          ],
+          [
+            "ppo_maze_1",
+            -23.0
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -23.0,
+        "timestamp": "20260126-080544",
+        "seeds": [
+          5,
+          6
+        ]
+      },
+      {
+        "cycle": 6,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -26.333333333333332
+          ],
+          [
+            "ppo_maze_1",
+            -22.0
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -22.0,
+        "timestamp": "20260126-080606",
+        "seeds": [
+          6,
+          7
+        ]
+      }
+    ]
+  }
+}
