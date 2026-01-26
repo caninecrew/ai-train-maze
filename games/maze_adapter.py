@@ -172,9 +172,9 @@ class MazeEnv(gym.Env):
             return base_goal
         fraction_env = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
         try:
-            fraction = float(fraction_env) if fraction_env else 0.35
+            fraction = float(fraction_env) if fraction_env else 0.1
         except ValueError:
-            fraction = 0.35
+            fraction = 0.1
         fraction = max(0.1, min(0.9, fraction))
         target_dist = max(1, int(goal_dist * fraction))
         candidates = np.argwhere(dist_start == target_dist)
