@@ -54,11 +54,11 @@ class MazeEnv(gym.Env):
         self._goal_bonus = 500.0
         self._idle_penalty = -0.005
         self._shaping_coef = 0.1
-        self._novelty_bonus = 0.01
+        self._novelty_bonus = 0.02
         self._backtrack_penalty = -0.2
         self._best_dist_bonus = 0.1
         self._best_dist_hit_bonus = 0.2
-        self._best_progress_bonus = 0.05
+        self._best_progress_bonus = 0.08
 
         start = self._meta.get("start")
         goal = self._meta.get("goal")
