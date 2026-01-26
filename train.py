@@ -836,7 +836,16 @@ def main():
                                 print(traceback.format_exc())
                             continue
                         raise
-                    scores.append((model_id, metrics["avg_reward"]))
+                    avg_reward = float(metrics.get("avg_reward", 0.0) or 0.0)
+                    best_dist = metrics.get("best_dist")
+                    goal_rate = metrics.get("goal_reached_rate")
+                    if best_dist is None:
+                        score = avg_reward
+                    else:
+                        dist_component = -float(best_dist)
+                        goal_component = float(goal_rate or 0.0) * 1000.0
+                        score = (2.0 * dist_component) + goal_component + (0.1 * avg_reward)
+                    scores.append((model_id, score))
                     metrics_list.append((model_id, metrics, latest_path))
                     if stamped_path:
                         metrics_list[-1] = (model_id, metrics, stamped_path)
