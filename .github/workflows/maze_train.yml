@@ -22,7 +22,7 @@ on:
       max_cycles:
         description: "Training cycles"
         required: false
-        default: "1"
+        default: "6"
       train_args:
         description: "Extra train.py args (optional)"
         required: false
@@ -58,7 +58,7 @@ on:
       train_timesteps:
         description: "Train timesteps per cycle"
         required: false
-        default: "150000"
+        default: "40000"
       n_envs:
         description: "Vectorized env count"
         required: false
