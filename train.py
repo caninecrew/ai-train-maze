@@ -829,60 +829,93 @@ def main():
                 worker_timeout = int(worker_timeout_env) if worker_timeout_env else 1800
             except ValueError:
                 worker_timeout = 1800
-            executor = concurrent.futures.ProcessPoolExecutor(
-                max_workers=cfg.iterations_per_set,
-                mp_context=mp.get_context("spawn"),
-            )
-            force_shutdown = False
-            try:
+            no_multiproc = os.getenv("TRAIN_NO_MULTIPROC", "").strip().lower() in {"1", "true", "yes", "on"}
+            if no_multiproc:
                 for idx, model_id in enumerate(model_ids):
                     derived_seed = base_seed + idx + cycle
-                    future = executor.submit(
-                        _train_single,
-                        model_id=model_id,
-                        game_name=game.name,
-                        cfg=cfg,
-                        seed=derived_seed,
-                    )
-                    futures.append(future)
-                    seed_by_future[future] = derived_seed
-
+                    try:
+                        model_id, metrics, stamp, latest_path, stamped_path = _train_single(
+                            model_id=model_id,
+                            game_name=game.name,
+                            cfg=cfg,
+                            seed=derived_seed,
+                        )
+                    except Exception as exc:
+                        if cfg.worker_watchdog:
+                            print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
+                            print(traceback.format_exc())
+                            continue
+                        raise
+                    avg_reward = float(metrics.get("avg_reward", 0.0) or 0.0)
+                    best_dist = metrics.get("best_dist")
+                    goal_rate = metrics.get("goal_reached_rate")
+                    if best_dist is None:
+                        score = avg_reward
+                    else:
+                        dist_component = -float(best_dist)
+                        goal_component = float(goal_rate or 0.0) * 1000.0
+                        score = (2.0 * dist_component) + goal_component + (0.1 * avg_reward)
+                    scores.append((model_id, score))
+                    metrics_list.append((model_id, metrics, latest_path))
+                    if stamped_path:
+                        metrics_list[-1] = (model_id, metrics, stamped_path)
+                    timestamp = stamp  # use last reported for video naming
+                    print(f"[{model_id}] Training done; seed={derived_seed}")
+            else:
+                executor = concurrent.futures.ProcessPoolExecutor(
+                    max_workers=cfg.iterations_per_set,
+                    mp_context=mp.get_context("spawn"),
+                )
+                force_shutdown = False
                 try:
-                    for future in concurrent.futures.as_completed(futures, timeout=worker_timeout):
-                        try:
-                            model_id, metrics, stamp, latest_path, stamped_path = future.result()
-                        except Exception as exc:
-                            if cfg.worker_watchdog:
-                                print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
-                                tb = future.exception()
-                                if tb:
-                                    print(traceback.format_exc())
-                                continue
-                            raise
-                        avg_reward = float(metrics.get("avg_reward", 0.0) or 0.0)
-                        best_dist = metrics.get("best_dist")
-                        goal_rate = metrics.get("goal_reached_rate")
-                        if best_dist is None:
-                            score = avg_reward
-                        else:
-                            dist_component = -float(best_dist)
-                            goal_component = float(goal_rate or 0.0) * 1000.0
-                            score = (2.0 * dist_component) + goal_component + (0.1 * avg_reward)
-                        scores.append((model_id, score))
-                        metrics_list.append((model_id, metrics, latest_path))
-                        if stamped_path:
-                            metrics_list[-1] = (model_id, metrics, stamped_path)
-                        timestamp = stamp  # use last reported for video naming
-                        seed_used = seed_by_future.get(future, base_seed)
-                        print(f"[{model_id}] Training done; seed={seed_used}")
-                except concurrent.futures.TimeoutError:
-                    print(f"[watchdog] Worker(s) timed out after {worker_timeout}s; canceling remaining.")
-                    for future in futures:
-                        if not future.done():
-                            future.cancel()
-                    force_shutdown = True
-            finally:
-                executor.shutdown(wait=not force_shutdown, cancel_futures=True)
+                    for idx, model_id in enumerate(model_ids):
+                        derived_seed = base_seed + idx + cycle
+                        future = executor.submit(
+                            _train_single,
+                            model_id=model_id,
+                            game_name=game.name,
+                            cfg=cfg,
+                            seed=derived_seed,
+                        )
+                        futures.append(future)
+                        seed_by_future[future] = derived_seed
+
+                    try:
+                        for future in concurrent.futures.as_completed(futures, timeout=worker_timeout):
+                            try:
+                                model_id, metrics, stamp, latest_path, stamped_path = future.result()
+                            except Exception as exc:
+                                if cfg.worker_watchdog:
+                                    print(f"[watchdog] Worker failed: {exc}; continuing without this model.")
+                                    tb = future.exception()
+                                    if tb:
+                                        print(traceback.format_exc())
+                                    continue
+                                raise
+                            avg_reward = float(metrics.get("avg_reward", 0.0) or 0.0)
+                            best_dist = metrics.get("best_dist")
+                            goal_rate = metrics.get("goal_reached_rate")
+                            if best_dist is None:
+                                score = avg_reward
+                            else:
+                                dist_component = -float(best_dist)
+                                goal_component = float(goal_rate or 0.0) * 1000.0
+                                score = (2.0 * dist_component) + goal_component + (0.1 * avg_reward)
+                            scores.append((model_id, score))
+                            metrics_list.append((model_id, metrics, latest_path))
+                            if stamped_path:
+                                metrics_list[-1] = (model_id, metrics, stamped_path)
+                            timestamp = stamp  # use last reported for video naming
+                            seed_used = seed_by_future.get(future, base_seed)
+                            print(f"[{model_id}] Training done; seed={seed_used}")
+                    except concurrent.futures.TimeoutError:
+                        print(f"[watchdog] Worker(s) timed out after {worker_timeout}s; canceling remaining.")
+                        for future in futures:
+                            if not future.done():
+                                future.cancel()
+                        force_shutdown = True
+                finally:
+                    executor.shutdown(wait=not force_shutdown, cancel_futures=True)
         except KeyboardInterrupt:
             print("KeyboardInterrupt received; stopping training and canceling workers.")
             for future in futures:
