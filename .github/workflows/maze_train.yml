@@ -34,7 +34,7 @@ on:
       iterations_per_set:
         description: "Parallel model lines per cycle"
         required: false
-        default: "3"
+        default: "2"
       max_steps:
         description: "Max steps per episode (maze env)"
         required: false
@@ -62,7 +62,7 @@ on:
       eval_episodes:
         description: "Evaluation episodes"
         required: false
-        default: "1"
+        default: "3"
       device:
         description: "Training device (cpu or cuda)"
         required: false
