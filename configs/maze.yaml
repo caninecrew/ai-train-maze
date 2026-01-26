@@ -1,6 +1,7 @@
 name: maze
 
 defaults:
+  device: cpu
   video_steps: 600
   max_video_seconds: 20
   target_fps: 30
