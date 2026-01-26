@@ -39,6 +39,22 @@ on:
         description: "Max steps per episode (maze env)"
         required: false
         default: "3600"
+      train_timesteps:
+        description: "Train timesteps per cycle"
+        required: false
+        default: "150000"
+      n_envs:
+        description: "Vectorized env count"
+        required: false
+        default: "4"
+      eval_episodes:
+        description: "Evaluation episodes"
+        required: false
+        default: "1"
+      device:
+        description: "Training device (cpu or cuda)"
+        required: false
+        default: "cpu"
   schedule:
     - cron: "0 * * * *"
 jobs:
@@ -144,7 +160,23 @@ jobs:
             resume_arg="--resume-from $best_resume"
             echo "Using best checkpoint: $best_resume"
           fi
-          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" --early-stop-patience "$patience" $resume_arg ${{ inputs.train_args }}
+          train_steps="${{ inputs.train_timesteps }}"
+          if [ -z "$train_steps" ]; then
+            train_steps="150000"
+          fi
+          n_envs="${{ inputs.n_envs }}"
+          if [ -z "$n_envs" ]; then
+            n_envs="4"
+          fi
+          eval_episodes="${{ inputs.eval_episodes }}"
+          if [ -z "$eval_episodes" ]; then
+            eval_episodes="1"
+          fi
+          device="${{ inputs.device }}"
+          if [ -z "$device" ]; then
+            device="cpu"
+          fi
+          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" --early-stop-patience "$patience" --train-timesteps "$train_steps" --n-envs "$n_envs" --eval-episodes "$eval_episodes" --device "$device" $resume_arg ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'
