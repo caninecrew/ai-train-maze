@@ -298,6 +298,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                     "avg_return_rate": _safe_float(row.get("avg_return_rate")),
                                     "avg_return_rate_ci": _safe_float(row.get("avg_return_rate_ci")),
                                     "delta_reward": _safe_float(row.get("delta_reward")),
+                                    "goal_reached_rate": _safe_float(row.get("goal_reached_rate")),
+                                    "best_dist": _safe_float(row.get("best_dist")),
+                                    "best_progress": _safe_float(row.get("best_progress")),
+                                    "avg_steps": _safe_float(row.get("avg_steps")),
                                     "timestamp": row.get("timestamp", ""),
                                     "run_id": row.get("run_timestamp", ""),
                                     "game": row.get("game", ""),
@@ -539,6 +543,17 @@ def _dashboard_html() -> str:
             <div id="mazeMetaPath" class="tiny">--</div>
           </div>
           <div class="card">
+            <div class="label">Maze Progress</div>
+            <div class="tiny">Goal reached rate</div>
+            <div id="kpiGoalRate" class="stat">--</div>
+            <div class="tiny">Best progress (cells)</div>
+            <div id="kpiBestProgress">--</div>
+            <div class="tiny">Avg steps</div>
+            <div id="kpiAvgSteps">--</div>
+            <div class="tiny">Best dist to goal</div>
+            <div id="kpiBestDist">--</div>
+          </div>
+          <div class="card">
             <div class="label">Latest Run</div>
             <div id="runId">--</div>
             <div class="tiny">Most recent training session.</div>
@@ -775,6 +790,8 @@ def _dashboard_html() -> str:
                 <th class="maze-hide">Win Rate</th>
                 <th>Episode Len</th>
                 <th class="maze-hide">Return</th>
+                <th>Goal Rate</th>
+                <th>Best Progress</th>
               </tr>
             </thead>
             <tbody id="metricsTable"></tbody>
@@ -1079,7 +1096,9 @@ async function refreshCharts() {
     const epLen = row.avg_ep_len ?? row.avg_rally_length;
     const winCell = showWin ? `<td class="maze-hide">${fmtCell(row.win_rate, 2)}</td>` : '';
     const returnCell = showWin ? `<td class="maze-hide">${fmtCell(row.avg_return_rate, 2)}</td>` : '';
-    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}`;
+    const goalCell = `<td>${fmtCell(row.goal_reached_rate, 2)}</td>`;
+    const progressCell = `<td>${fmtCell(row.best_progress, 1)}</td>`;
+    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}${goalCell}${progressCell}`;
     table.appendChild(tr);
   }
   const byCycle = new Map();
@@ -1342,6 +1361,10 @@ function updateKpis(series) {
   const avgReturn = isMaze ? null : avgOfRows(latest, 'avg_return_rate');
   const avgReturnCi = isMaze ? null : avgOfRows(latest, 'avg_return_rate_ci');
   const avgEpLen = avgOfRows(latest, 'avg_ep_len');
+  const avgGoalRate = avgOfRows(latest, 'goal_reached_rate');
+  const avgBestProgress = avgOfRows(latest, 'best_progress');
+  const avgBestDist = avgOfRows(latest, 'best_dist');
+  const avgSteps = avgOfRows(latest, 'avg_steps');
   const prevAvgReward = avgOfRows(prev, 'avg_reward') ?? avgReward;
   const prevAvgWin = isMaze ? null : (avgOfRows(prev, 'win_rate') ?? avgWin);
   const prevAvgLen = avgOfRows(prev, 'avg_ep_len') ?? avgEpLen;
@@ -1358,6 +1381,10 @@ function updateKpis(series) {
   document.getElementById('kpiReturnRateCi').textContent = isMaze ? 'Maze mode' : (avgReturnCi !== null ? `CI +/-${avgReturnCi.toFixed(2)}` : 'CI --');
   document.getElementById('kpiRally').textContent = avgEpLen !== null ? avgEpLen.toFixed(1) : '--';
   document.getElementById('kpiRallyDelta').textContent = `Delta ${deltaLen.toFixed(1)} vs last cycle`;
+  document.getElementById('kpiGoalRate').textContent = avgGoalRate !== null ? avgGoalRate.toFixed(2) : '--';
+  document.getElementById('kpiBestProgress').textContent = avgBestProgress !== null ? avgBestProgress.toFixed(1) : '--';
+  document.getElementById('kpiAvgSteps').textContent = avgSteps !== null ? avgSteps.toFixed(1) : '--';
+  document.getElementById('kpiBestDist').textContent = avgBestDist !== null ? avgBestDist.toFixed(1) : '--';
 }
 
 function updateCycleSelectors(byCycle) {
