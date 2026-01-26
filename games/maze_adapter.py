@@ -134,6 +134,10 @@ class MazeEnv(gym.Env):
         self._best_dist_hits = 0
         self._start_dist = self._prev_dist
         self._visited = {self._agent}
+        self._wall_hits = 0
+        self._idle_steps = 0
+        self._backtracks = 0
+        self._novel_steps = 0
         self._last_pos = self._agent
         self._prev_action = None
         return self._obs(), {}
@@ -159,13 +163,17 @@ class MazeEnv(gym.Env):
             if self._agent not in self._visited:
                 reward += self._novelty_bonus
                 self._visited.add(self._agent)
+                self._novel_steps += 1
             reverse_map = {0: 1, 1: 0, 2: 3, 3: 2}
             if self._prev_action is not None and action == reverse_map.get(self._prev_action):
                 reward += self._backtrack_penalty
+                self._backtracks += 1
         else:
             reward += self._wall_penalty
+            self._wall_hits += 1
         if self._agent == (r, c):
             reward += self._idle_penalty
+            self._idle_steps += 1
         self._last_pos = (r, c)
         self._prev_action = action
 
@@ -245,6 +253,12 @@ class MazeEnv(gym.Env):
             "best_dist": float(self._best_dist),
             "best_progress": float(self._start_dist - self._best_dist),
             "steps": float(self._step_count),
+            "wall_hits": float(self._wall_hits),
+            "idle_steps": float(self._idle_steps),
+            "backtracks": float(self._backtracks),
+            "novel_steps": float(self._novel_steps),
+            "unique_cells": float(len(self._visited)),
+            "final_dist": float(self._dist_at(self._agent)),
         }
 
 
@@ -256,6 +270,12 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
     best_dists: List[float] = []
     best_progress: List[float] = []
     steps: List[float] = []
+    wall_hits: List[float] = []
+    idle_steps: List[float] = []
+    backtracks: List[float] = []
+    novel_steps: List[float] = []
+    unique_cells: List[float] = []
+    final_dist: List[float] = []
     for _ in range(episodes):
         obs, _ = env.reset()
         done = False
@@ -274,6 +294,12 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         best_dists.append(float(stats.get("best_dist", 0.0)))
         best_progress.append(float(stats.get("best_progress", 0.0)))
         steps.append(float(stats.get("steps", ep_steps)))
+        wall_hits.append(float(stats.get("wall_hits", 0.0)))
+        idle_steps.append(float(stats.get("idle_steps", 0.0)))
+        backtracks.append(float(stats.get("backtracks", 0.0)))
+        novel_steps.append(float(stats.get("novel_steps", 0.0)))
+        unique_cells.append(float(stats.get("unique_cells", 0.0)))
+        final_dist.append(float(stats.get("final_dist", 0.0)))
     env.close()
 
     def _ci(values: List[float]) -> float:
@@ -293,6 +319,12 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         "best_dist": float(np.mean(best_dists)) if best_dists else 0.0,
         "best_progress": float(np.mean(best_progress)) if best_progress else 0.0,
         "avg_steps": float(np.mean(steps)) if steps else 0.0,
+        "wall_hits": float(np.mean(wall_hits)) if wall_hits else 0.0,
+        "idle_steps": float(np.mean(idle_steps)) if idle_steps else 0.0,
+        "backtracks": float(np.mean(backtracks)) if backtracks else 0.0,
+        "novel_steps": float(np.mean(novel_steps)) if novel_steps else 0.0,
+        "unique_cells": float(np.mean(unique_cells)) if unique_cells else 0.0,
+        "final_dist": float(np.mean(final_dist)) if final_dist else 0.0,
     }
     def get_eval_stats(self) -> Dict[str, float]:
         return {
@@ -316,7 +348,18 @@ def maze_adapter() -> GameAdapter:
         description="Grid-based maze environment backed by a maze PNG and cached grid.",
         model_prefix="ppo_maze",
         make_env_fn=_make_env,
-        extra_metrics=["goal_reached_rate", "best_dist", "best_progress", "avg_steps"],
+        extra_metrics=[
+            "goal_reached_rate",
+            "best_dist",
+            "best_progress",
+            "avg_steps",
+            "wall_hits",
+            "idle_steps",
+            "backtracks",
+            "novel_steps",
+            "unique_cells",
+            "final_dist",
+        ],
         eval_fn=_evaluate_maze,
         heatmap_fn=None,
     )

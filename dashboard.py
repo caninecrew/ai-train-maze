@@ -302,6 +302,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                     "best_dist": _safe_float(row.get("best_dist")),
                                     "best_progress": _safe_float(row.get("best_progress")),
                                     "avg_steps": _safe_float(row.get("avg_steps")),
+                                    "wall_hits": _safe_float(row.get("wall_hits")),
+                                    "idle_steps": _safe_float(row.get("idle_steps")),
+                                    "backtracks": _safe_float(row.get("backtracks")),
+                                    "novel_steps": _safe_float(row.get("novel_steps")),
+                                    "unique_cells": _safe_float(row.get("unique_cells")),
+                                    "final_dist": _safe_float(row.get("final_dist")),
                                     "timestamp": row.get("timestamp", ""),
                                     "run_id": row.get("run_timestamp", ""),
                                     "game": row.get("game", ""),
@@ -792,6 +798,9 @@ def _dashboard_html() -> str:
                 <th class="maze-hide">Return</th>
                 <th>Goal Rate</th>
                 <th>Best Progress</th>
+                <th>Wall Hits</th>
+                <th>Backtracks</th>
+                <th>Unique Cells</th>
               </tr>
             </thead>
             <tbody id="metricsTable"></tbody>
@@ -1098,7 +1107,10 @@ async function refreshCharts() {
     const returnCell = showWin ? `<td class="maze-hide">${fmtCell(row.avg_return_rate, 2)}</td>` : '';
     const goalCell = `<td>${fmtCell(row.goal_reached_rate, 2)}</td>`;
     const progressCell = `<td>${fmtCell(row.best_progress, 1)}</td>`;
-    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}${goalCell}${progressCell}`;
+    const wallCell = `<td>${fmtCell(row.wall_hits, 1)}</td>`;
+    const backtrackCell = `<td>${fmtCell(row.backtracks, 1)}</td>`;
+    const uniqueCell = `<td>${fmtCell(row.unique_cells, 1)}</td>`;
+    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}${goalCell}${progressCell}${wallCell}${backtrackCell}${uniqueCell}`;
     table.appendChild(tr);
   }
   const byCycle = new Map();
