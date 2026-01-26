@@ -49,16 +49,17 @@ class MazeEnv(gym.Env):
         else:
             self._max_steps = int(self._rows * self._cols * 0.75)
         self._step_count = 0
-        self._wall_penalty = -2.0
-        self._consec_wall_penalty = -1.0
-        self._step_penalty = -0.001
+        self._wall_penalty = -1.0
+        self._consec_wall_penalty = -0.5
+        self._step_penalty = -0.0005
         self._goal_bonus = 500.0
-        self._idle_penalty = -0.005
+        self._idle_penalty = -0.001
         self._move_bonus = 0.01
         self._cookie_bonus = 0.05
         self._shaping_coef = 0.1
         self._novelty_bonus = 0.02
-        self._backtrack_penalty = -0.2
+        self._backtrack_penalty = -0.1
+        self._terminate_on_wall = os.getenv("MAZE_TERMINATE_ON_WALL", "").strip().lower() in {"1", "true", "yes", "on"}
         self._best_dist_bonus = 0.1
         self._best_dist_hit_bonus = 0.2
         self._best_progress_bonus = 0.08
@@ -70,8 +71,20 @@ class MazeEnv(gym.Env):
         self._goal = self._apply_training_goal(base_goal)
         self._dist_map = self._compute_distances(self._goal)
 
+        self._obs_mode = os.getenv("MAZE_OBS_MODE", "pos").strip().lower()
+        sensor_range_env = os.getenv("MAZE_SENSOR_RANGE", "").strip()
+        self._sensor_range = None
+        if sensor_range_env:
+            try:
+                self._sensor_range = max(1, int(sensor_range_env))
+            except ValueError:
+                self._sensor_range = None
+
         self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
+        obs_size = 4
+        if self._obs_mode in {"rays", "pos+rays"}:
+            obs_size = 8 if self._obs_mode == "rays" else 12
+        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(obs_size,), dtype=np.float32)
 
         cell_size_env = os.getenv("MAZE_CELL_SIZE", "").strip()
         if cell_size_env:
@@ -183,6 +196,7 @@ class MazeEnv(gym.Env):
         nr, nc = r + dr, c + dc
 
         reward = self._step_penalty
+        terminated = False
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
             self._consec_wall_hits = 0
@@ -214,6 +228,10 @@ class MazeEnv(gym.Env):
             self._consec_wall_hits += 1
             if self._consec_wall_hits > 1:
                 reward += self._consec_wall_penalty * (self._consec_wall_hits - 1)
+            if self._terminate_on_wall:
+                terminated = True
+            else:
+                terminated = False
         if self._agent == (r, c):
             reward += self._idle_penalty
             self._idle_steps += 1
@@ -221,7 +239,8 @@ class MazeEnv(gym.Env):
         self._prev_action = action
 
         self._step_count += 1
-        terminated = self._agent == self._goal
+        if self._agent == self._goal:
+            terminated = True
         if terminated:
             reward += self._goal_bonus
         truncated = self._step_count >= self._max_steps
@@ -253,15 +272,39 @@ class MazeEnv(gym.Env):
     def _obs(self) -> np.ndarray:
         ar, ac = self._agent
         gr, gc = self._goal
-        return np.array(
-            [
-                ar / max(1, self._rows - 1),
-                ac / max(1, self._cols - 1),
-                gr / max(1, self._rows - 1),
-                gc / max(1, self._cols - 1),
-            ],
-            dtype=np.float32,
-        )
+        base = [
+            ar / max(1, self._rows - 1),
+            ac / max(1, self._cols - 1),
+            gr / max(1, self._rows - 1),
+            gc / max(1, self._cols - 1),
+        ]
+        if self._obs_mode == "pos":
+            return np.array(base, dtype=np.float32)
+        rays = self._ray_sensors()
+        if self._obs_mode == "rays":
+            return np.array(rays, dtype=np.float32)
+        return np.array(base + rays, dtype=np.float32)
+
+    def _ray_sensors(self) -> List[float]:
+        directions = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
+        max_dist = self._sensor_range
+        if max_dist is None:
+            max_dist = max(self._rows, self._cols)
+        distances = []
+        for dr, dc in directions:
+            dist = self._ray_distance(dr, dc, max_dist)
+            distances.append(dist / max_dist)
+        return distances
+
+    def _ray_distance(self, dr: int, dc: int, max_dist: int) -> int:
+        r, c = self._agent
+        for step in range(1, max_dist + 1):
+            nr, nc = r + dr * step, c + dc * step
+            if not (0 <= nr < self._rows and 0 <= nc < self._cols):
+                return step
+            if self._grid[nr, nc] != 0:
+                return step
+        return max_dist
 
     def render(self):
         if self.render_mode != "rgb_array":
