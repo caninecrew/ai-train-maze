@@ -50,7 +50,7 @@ on:
       train_goal_fraction:
         description: "Fraction toward goal for training target (0.1-0.9)"
         required: false
-        default: "0.25"
+        default: "0.35"
       train_timesteps:
         description: "Train timesteps per cycle"
         required: false
