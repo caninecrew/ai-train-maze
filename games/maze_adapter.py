@@ -49,13 +49,13 @@ class MazeEnv(gym.Env):
         else:
             self._max_steps = int(self._rows * self._cols * 0.75)
         self._step_count = 0
-        self._wall_penalty = -10.0
+        self._wall_penalty = -6.0
         self._step_penalty = -0.002
         self._goal_bonus = 100.0
         self._idle_penalty = -0.01
         self._shaping_coef = 0.5
         self._novelty_bonus = 0.05
-        self._backtrack_penalty = -1.0
+        self._backtrack_penalty = -0.5
         self._best_dist_bonus = 0.25
         self._best_dist_hit_bonus = 0.5
         self._best_progress_bonus = 0.1
