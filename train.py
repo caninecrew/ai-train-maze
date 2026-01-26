@@ -636,7 +636,9 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     if solved:
         if train_goal:
             train_goal = ""
-        fraction = min(0.9, fraction + 0.1)
+        fraction = min(0.9, fraction + 0.05)
+    elif stats.get("goal_rate", 0.0) == 0.0 and stats.get("best_dist", 999.0) > 40.0:
+        fraction = max(0.1, fraction * 0.5)
     return {
         "train_goal": train_goal,
         "train_goal_fraction": str(max(0.1, min(0.9, fraction))),
