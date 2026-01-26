@@ -564,6 +564,47 @@ def _best_checkpoint_from_metrics(cfg: TrainConfig, model_prefix: str) -> Option
     return str(candidate) if candidate.exists() else None
 
 
+def _auto_goal_fraction_from_metrics(cfg: TrainConfig) -> Optional[float]:
+    metrics_path = Path(cfg.metrics_csv)
+    if not metrics_path.exists():
+        return None
+    latest_by_run: Dict[str, Dict[str, float]] = {}
+    try:
+        with metrics_path.open("r", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                if row.get("game") != "maze":
+                    continue
+                run_id = row.get("run_timestamp") or ""
+                if not run_id:
+                    continue
+                try:
+                    goal_rate = float(row.get("goal_reached_rate") or 0.0)
+                except Exception:
+                    goal_rate = 0.0
+                try:
+                    best_dist = float(row.get("best_dist") or 0.0)
+                except Exception:
+                    best_dist = 0.0
+                latest_by_run.setdefault(run_id, {"goal_rate": 0.0, "best_dist": best_dist})
+                latest_by_run[run_id]["goal_rate"] = max(latest_by_run[run_id]["goal_rate"], goal_rate)
+                latest_by_run[run_id]["best_dist"] = min(latest_by_run[run_id]["best_dist"], best_dist)
+    except Exception:
+        return None
+    if not latest_by_run:
+        return None
+    last_run = sorted(latest_by_run.keys())[-1]
+    stats = latest_by_run[last_run]
+    fraction_env = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
+    try:
+        fraction = float(fraction_env) if fraction_env else 0.25
+    except ValueError:
+        fraction = 0.25
+    if stats.get("goal_rate", 0.0) >= 0.9 and stats.get("best_dist", 1.0) <= 1.0:
+        fraction = min(0.9, fraction + 0.1)
+    return max(0.1, min(0.9, fraction))
+
+
 def _git_commit_artifacts(cfg: TrainConfig, message: str) -> None:
     if os.getenv("CI", "").lower() != "true":
         return
@@ -707,6 +748,12 @@ def main():
         maze_res = _maze_video_resolution()
         if maze_res:
             cfg.video_resolution = maze_res
+        auto_goal = os.getenv("MAZE_TRAIN_AUTO", "").strip().lower() in {"1", "true", "yes", "on"}
+        if auto_goal and not os.getenv("MAZE_TRAIN_GOAL", "").strip():
+            next_fraction = _auto_goal_fraction_from_metrics(cfg)
+            if next_fraction is not None:
+                os.environ["MAZE_TRAIN_GOAL_FRACTION"] = str(next_fraction)
+                print(f"Auto training goal fraction: {next_fraction:.2f}")
     if cfg.list_games:
         print("Available games:")
         for game in list_games():

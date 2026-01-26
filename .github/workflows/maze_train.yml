@@ -43,10 +43,14 @@ on:
         description: "Use training goal override (curriculum)"
         required: false
         default: "true"
+      train_auto:
+        description: "Auto-advance training goal fraction based on metrics"
+        required: false
+        default: "true"
       train_goal:
         description: "Optional training goal override (row,col)"
         required: false
-        default: "8,8"
+        default: ""
       train_goal_fraction:
         description: "Fraction toward goal for training target (0.1-0.9)"
         required: false
@@ -149,6 +153,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
           MAZE_MAX_STEPS: ${{ inputs.max_steps }}
           MAZE_TRAIN_MODE: ${{ inputs.train_mode }}
+          MAZE_TRAIN_AUTO: ${{ inputs.train_auto }}
           MAZE_TRAIN_GOAL: ${{ inputs.train_goal }}
           MAZE_TRAIN_GOAL_FRACTION: ${{ inputs.train_goal_fraction }}
           TRAIN_DISABLE_GIT: "true"
