@@ -45,15 +45,15 @@ class MazeEnv(gym.Env):
             try:
                 self._max_steps = max(1, int(max_steps_env))
             except ValueError:
-                self._max_steps = int(self._rows * self._cols)
+                self._max_steps = int(self._rows * self._cols * 0.75)
         else:
-            self._max_steps = int(self._rows * self._cols)
+            self._max_steps = int(self._rows * self._cols * 0.75)
         self._step_count = 0
         self._wall_penalty = -2.0
         self._step_penalty = -0.005
-        self._goal_bonus = 50.0
+        self._goal_bonus = 100.0
         self._idle_penalty = -0.05
-        self._shaping_coef = 0.35
+        self._shaping_coef = 0.5
         self._novelty_bonus = 0.05
         self._backtrack_penalty = -0.1
 
