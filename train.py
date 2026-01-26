@@ -824,6 +824,8 @@ def main():
         return
     model_ids = [f"{model_prefix}_{i}" for i in range(cfg.iterations_per_set)]
     metric_fields = ["avg_reward", "avg_reward_ci", "avg_ep_len", "avg_ep_len_ci"] + list(game.extra_metrics)
+    train_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()
+    train_goal_fraction = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
 
     failure_detected = False
     best_score = float("-inf")
@@ -1047,6 +1049,8 @@ def main():
                         "model_id",
                         *metric_fields,
                         "delta_reward",
+                        "train_goal",
+                        "train_goal_fraction",
                         "timestamp",
                         "run_timestamp",
                         "game",
@@ -1063,6 +1067,8 @@ def main():
                     for field in metric_fields:
                         row[field] = metrics.get(field, "")
                     row["delta_reward"] = delta_reward if delta_reward is not None else ""
+                    row["train_goal"] = train_goal
+                    row["train_goal_fraction"] = train_goal_fraction
                     row["timestamp"] = timestamp
                     row["run_timestamp"] = run_timestamp
                     row["game"] = game.name
