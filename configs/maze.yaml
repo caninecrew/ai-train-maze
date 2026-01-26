@@ -6,3 +6,4 @@ defaults:
   target_fps: 30
   max_cycles: 5
   video_resolution: "600x600"
+  evo_first: true
