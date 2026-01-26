@@ -1,0 +1,266 @@
+{
+  "config": {
+    "game": "maze",
+    "model_prefix": null,
+    "train_timesteps": 40000,
+    "n_steps": 256,
+    "batch_size": 512,
+    "n_epochs": 4,
+    "gamma": 0.99,
+    "learning_rate": 0.00025,
+    "device": "cpu",
+    "target_fps": 30,
+    "max_video_seconds": 30,
+    "video_steps": 600,
+    "max_cycles": 10,
+    "checkpoint_interval": 1,
+    "iterations_per_set": 2,
+    "n_envs": 4,
+    "seed": 0,
+    "deterministic": false,
+    "base_seed": 0,
+    "early_stop_patience": 9999,
+    "improvement_threshold": 0.05,
+    "eval_episodes": 3,
+    "eval_video_steps": 0,
+    "long_eval_video_steps": 0,
+    "top_k_checkpoints": 3,
+    "no_checkpoint": false,
+    "individual_videos": false,
+    "cpu_affinity": null,
+    "num_threads": null,
+    "video_dir": "videos",
+    "model_dir": "models",
+    "log_dir": "logs",
+    "metrics_csv": "logs/metrics.csv",
+    "metrics_deltas": true,
+    "stream_tensorboard": false,
+    "status": false,
+    "resume_from": "models/ppo_maze_5_latest.zip",
+    "config_path": null,
+    "profile": null,
+    "dry_run": false,
+    "video_resolution": "480x480",
+    "eval_overlay": true,
+    "eval_deterministic": false,
+    "worker_watchdog": true,
+    "list_games": false,
+    "export_config": null
+  },
+  "summary": {
+    "event": "summary",
+    "game": "maze",
+    "model_prefix": "ppo_maze",
+    "best_model": "ppo_maze_1",
+    "best_score": -69.0,
+    "metrics_csv": "logs/metrics.csv",
+    "video_dir": "videos",
+    "model_dir": "models",
+    "last_combined_video": "videos/ppo_maze_combined_20260126-070524_seed0.mp4",
+    "last_eval_video": null,
+    "run_timestamp": "20260126-070154",
+    "stop_reason": "max_cycles",
+    "cycles": [
+      {
+        "cycle": 1,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -70.66666666666667
+          ],
+          [
+            "ppo_maze_1",
+            -80.0
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -70.66666666666667,
+        "timestamp": "20260126-070203",
+        "seeds": [
+          1,
+          2
+        ]
+      },
+      {
+        "cycle": 2,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -80.0
+          ],
+          [
+            "ppo_maze_1",
+            -71.0
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -71.0,
+        "timestamp": "20260126-070226",
+        "seeds": [
+          2,
+          3
+        ]
+      },
+      {
+        "cycle": 3,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -71.0
+          ],
+          [
+            "ppo_maze_1",
+            -79.0
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -71.0,
+        "timestamp": "20260126-070249",
+        "seeds": [
+          3,
+          4
+        ]
+      },
+      {
+        "cycle": 4,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -79.0
+          ],
+          [
+            "ppo_maze_1",
+            -72.33333333333333
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -72.33333333333333,
+        "timestamp": "20260126-070311",
+        "seeds": [
+          4,
+          5
+        ]
+      },
+      {
+        "cycle": 5,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -72.33333333333333
+          ],
+          [
+            "ppo_maze_1",
+            -79.66666666666667
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -72.33333333333333,
+        "timestamp": "20260126-070333",
+        "seeds": [
+          5,
+          6
+        ]
+      },
+      {
+        "cycle": 6,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -79.66666666666667
+          ],
+          [
+            "ppo_maze_1",
+            -69.0
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -69.0,
+        "timestamp": "20260126-070355",
+        "seeds": [
+          6,
+          7
+        ]
+      },
+      {
+        "cycle": 7,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -69.0
+          ],
+          [
+            "ppo_maze_1",
+            -79.66666666666667
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -69.0,
+        "timestamp": "20260126-070418",
+        "seeds": [
+          7,
+          8
+        ]
+      },
+      {
+        "cycle": 8,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -79.66666666666667
+          ],
+          [
+            "ppo_maze_1",
+            -71.66666666666667
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -71.66666666666667,
+        "timestamp": "20260126-070440",
+        "seeds": [
+          8,
+          9
+        ]
+      },
+      {
+        "cycle": 9,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -71.66666666666667
+          ],
+          [
+            "ppo_maze_1",
+            -73.33333333333333
+          ]
+        ],
+        "best_id": "ppo_maze_0",
+        "best_score": -71.66666666666667,
+        "timestamp": "20260126-070502",
+        "seeds": [
+          9,
+          10
+        ]
+      },
+      {
+        "cycle": 10,
+        "scores": [
+          [
+            "ppo_maze_0",
+            -73.33333333333333
+          ],
+          [
+            "ppo_maze_1",
+            -73.0
+          ]
+        ],
+        "best_id": "ppo_maze_1",
+        "best_score": -73.0,
+        "timestamp": "20260126-070524",
+        "seeds": [
+          10,
+          11
+        ]
+      }
+    ]
+  }
+}
