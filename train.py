@@ -564,11 +564,11 @@ def _best_checkpoint_from_metrics(cfg: TrainConfig, model_prefix: str) -> Option
     return str(candidate) if candidate.exists() else None
 
 
-def _auto_goal_fraction_from_metrics(cfg: TrainConfig) -> Optional[float]:
+def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str]]:
     metrics_path = Path(cfg.metrics_csv)
     if not metrics_path.exists():
         return None
-    latest_by_run: Dict[str, Dict[str, float]] = {}
+    latest_by_run: Dict[str, Dict[str, Any]] = {}
     try:
         with metrics_path.open("r", encoding="utf-8") as fh:
             reader = csv.DictReader(fh)
@@ -586,23 +586,44 @@ def _auto_goal_fraction_from_metrics(cfg: TrainConfig) -> Optional[float]:
                     best_dist = float(row.get("best_dist") or 0.0)
                 except Exception:
                     best_dist = 0.0
-                latest_by_run.setdefault(run_id, {"goal_rate": 0.0, "best_dist": best_dist})
+                train_goal = row.get("train_goal") or ""
+                train_goal_fraction = row.get("train_goal_fraction") or ""
+                latest_by_run.setdefault(
+                    run_id,
+                    {
+                        "goal_rate": 0.0,
+                        "best_dist": best_dist,
+                        "train_goal": train_goal,
+                        "train_goal_fraction": train_goal_fraction,
+                    },
+                )
                 latest_by_run[run_id]["goal_rate"] = max(latest_by_run[run_id]["goal_rate"], goal_rate)
                 latest_by_run[run_id]["best_dist"] = min(latest_by_run[run_id]["best_dist"], best_dist)
+                if train_goal:
+                    latest_by_run[run_id]["train_goal"] = train_goal
+                if train_goal_fraction:
+                    latest_by_run[run_id]["train_goal_fraction"] = train_goal_fraction
     except Exception:
         return None
     if not latest_by_run:
         return None
     last_run = sorted(latest_by_run.keys())[-1]
     stats = latest_by_run[last_run]
-    fraction_env = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
+    fraction_env = stats.get("train_goal_fraction") or os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
     try:
         fraction = float(fraction_env) if fraction_env else 0.25
     except ValueError:
         fraction = 0.25
-    if stats.get("goal_rate", 0.0) >= 0.9 and stats.get("best_dist", 1.0) <= 1.0:
+    train_goal = str(stats.get("train_goal") or "")
+    solved = stats.get("goal_rate", 0.0) >= 0.9 and stats.get("best_dist", 1.0) <= 1.0
+    if solved:
+        if train_goal:
+            train_goal = ""
         fraction = min(0.9, fraction + 0.1)
-    return max(0.1, min(0.9, fraction))
+    return {
+        "train_goal": train_goal,
+        "train_goal_fraction": str(max(0.1, min(0.9, fraction))),
+    }
 
 
 def _git_commit_artifacts(cfg: TrainConfig, message: str) -> None:
@@ -750,10 +771,14 @@ def main():
             cfg.video_resolution = maze_res
         auto_goal = os.getenv("MAZE_TRAIN_AUTO", "").strip().lower() in {"1", "true", "yes", "on"}
         if auto_goal and not os.getenv("MAZE_TRAIN_GOAL", "").strip():
-            next_fraction = _auto_goal_fraction_from_metrics(cfg)
-            if next_fraction is not None:
-                os.environ["MAZE_TRAIN_GOAL_FRACTION"] = str(next_fraction)
-                print(f"Auto training goal fraction: {next_fraction:.2f}")
+            auto_settings = _auto_training_goal_from_metrics(cfg)
+            if auto_settings:
+                os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
+                os.environ["MAZE_TRAIN_GOAL_FRACTION"] = auto_settings.get("train_goal_fraction", "")
+                if auto_settings.get("train_goal"):
+                    print(f"Auto training goal: {auto_settings.get('train_goal')}")
+                if auto_settings.get("train_goal_fraction"):
+                    print(f"Auto training goal fraction: {auto_settings.get('train_goal_fraction')}")
     if cfg.list_games:
         print("Available games:")
         for game in list_games():
