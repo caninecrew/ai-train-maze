@@ -55,6 +55,7 @@ class MazeEnv(gym.Env):
         self._goal_bonus = 500.0
         self._idle_penalty = -0.005
         self._move_bonus = 0.01
+        self._cookie_bonus = 0.05
         self._shaping_coef = 0.1
         self._novelty_bonus = 0.02
         self._backtrack_penalty = -0.2
@@ -86,6 +87,12 @@ class MazeEnv(gym.Env):
                 self._move_bonus = float(move_bonus_env)
             except ValueError:
                 self._move_bonus = 0.01
+        cookie_bonus_env = os.getenv("MAZE_COOKIE_BONUS", "").strip()
+        if cookie_bonus_env:
+            try:
+                self._cookie_bonus = float(cookie_bonus_env)
+            except ValueError:
+                self._cookie_bonus = 0.05
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
@@ -165,6 +172,8 @@ class MazeEnv(gym.Env):
             new_dist = self._dist_at(self._agent)
             if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
+                if new_dist < self._prev_dist:
+                    reward += self._cookie_bonus
             if np.isfinite(new_dist) and new_dist < self._best_dist:
                 reward += self._best_dist_bonus * (self._best_dist - new_dist)
                 self._best_dist = new_dist
