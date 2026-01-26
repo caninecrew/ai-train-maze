@@ -878,6 +878,17 @@ def main():
         cycle += 1
         print(f"\n=== Cycle {cycle} / {cfg.max_cycles} ===")
         start_cycle = time.time()
+        if cfg.game == "maze":
+            auto_goal = os.getenv("MAZE_TRAIN_AUTO", "").strip().lower() in {"1", "true", "yes", "on"}
+            if auto_goal:
+                auto_settings = _auto_training_goal_from_metrics(cfg)
+                if auto_settings:
+                    os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
+                    os.environ["MAZE_TRAIN_GOAL_FRACTION"] = auto_settings.get("train_goal_fraction", "")
+                    if auto_settings.get("train_goal"):
+                        print(f"[cycle {cycle}] Auto training goal: {auto_settings.get('train_goal')}")
+                    if auto_settings.get("train_goal_fraction"):
+                        print(f"[cycle {cycle}] Auto training goal fraction: {auto_settings.get('train_goal_fraction')}")
 
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
