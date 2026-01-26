@@ -46,7 +46,7 @@ on:
       train_goal:
         description: "Optional training goal override (row,col)"
         required: false
-        default: ""
+        default: "10,10"
       train_goal_fraction:
         description: "Fraction toward goal for training target (0.1-0.9)"
         required: false
