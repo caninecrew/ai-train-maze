@@ -51,7 +51,7 @@ class MazeEnv(gym.Env):
         self._step_count = 0
         self._wall_penalty = -4.0
         self._step_penalty = -0.002
-        self._goal_bonus = 100.0
+        self._goal_bonus = 300.0
         self._idle_penalty = -0.01
         self._shaping_coef = 0.5
         self._novelty_bonus = 0.05
