@@ -371,6 +371,11 @@ def _progress_bar_ready(suppress_log: bool = False) -> bool:
     return _progress_bar_available
 
 
+def _auto_goal_enabled() -> bool:
+    raw = os.getenv("MAZE_TRAIN_AUTO", "true").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 def parse_args() -> TrainConfig:
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument("--config", type=str, help="Path to YAML/JSON config to merge.")
@@ -788,7 +793,7 @@ def main():
         maze_res = _maze_video_resolution()
         if maze_res:
             cfg.video_resolution = maze_res
-        auto_goal = os.getenv("MAZE_TRAIN_AUTO", "").strip().lower() in {"1", "true", "yes", "on"}
+        auto_goal = _auto_goal_enabled()
         if auto_goal and not os.getenv("MAZE_TRAIN_GOAL", "").strip():
             auto_settings = _auto_training_goal_from_metrics(cfg)
             if auto_settings:
@@ -898,7 +903,7 @@ def main():
         print(f"\n=== Cycle {cycle} / {cfg.max_cycles} ===")
         start_cycle = time.time()
         if cfg.game == "maze":
-            auto_goal = os.getenv("MAZE_TRAIN_AUTO", "").strip().lower() in {"1", "true", "yes", "on"}
+            auto_goal = _auto_goal_enabled()
             if auto_goal:
                 auto_settings = _auto_training_goal_from_metrics(cfg)
                 if auto_settings:
