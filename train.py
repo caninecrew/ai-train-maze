@@ -550,10 +550,27 @@ def _best_checkpoint_from_metrics(cfg: TrainConfig, model_prefix: str) -> Option
             if not model_id or not model_id.startswith(model_prefix):
                 continue
             try:
-                reward = float(row.get("avg_reward", float("-inf")))
+                goal_rate = float(row.get("goal_reached_rate") or 0.0)
             except Exception:
-                reward = float("-inf")
-            if best_row is None or reward > float(best_row.get("avg_reward", float("-inf"))):
+                goal_rate = 0.0
+            try:
+                best_dist = float(row.get("best_dist") or float("inf"))
+            except Exception:
+                best_dist = float("inf")
+            if best_row is None:
+                best_row = row
+                continue
+            try:
+                best_goal_rate = float(best_row.get("goal_reached_rate") or 0.0)
+            except Exception:
+                best_goal_rate = 0.0
+            try:
+                best_best_dist = float(best_row.get("best_dist") or float("inf"))
+            except Exception:
+                best_best_dist = float("inf")
+            if (goal_rate > best_goal_rate) or (
+                goal_rate == best_goal_rate and best_dist < best_best_dist
+            ):
                 best_row = row
     if not best_row:
         return None
@@ -931,15 +948,12 @@ def main():
                             print(traceback.format_exc())
                             continue
                         raise
-                    avg_reward = float(metrics.get("avg_reward", 0.0) or 0.0)
                     best_dist = metrics.get("best_dist")
-                    goal_rate = metrics.get("goal_reached_rate")
+                    goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
                     if best_dist is None:
-                        score = avg_reward
+                        score = float("-inf")
                     else:
-                        dist_component = -float(best_dist)
-                        goal_component = float(goal_rate or 0.0) * 1000.0
-                        score = (2.0 * dist_component) + goal_component + (0.1 * avg_reward)
+                        score = -float(best_dist) + (goal_rate * 1000.0)
                     scores.append((model_id, score))
                     metrics_list.append((model_id, metrics, latest_path))
                     if stamped_path:
@@ -977,15 +991,12 @@ def main():
                                         print(traceback.format_exc())
                                     continue
                                 raise
-                            avg_reward = float(metrics.get("avg_reward", 0.0) or 0.0)
                             best_dist = metrics.get("best_dist")
-                            goal_rate = metrics.get("goal_reached_rate")
+                            goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
                             if best_dist is None:
-                                score = avg_reward
+                                score = float("-inf")
                             else:
-                                dist_component = -float(best_dist)
-                                goal_component = float(goal_rate or 0.0) * 1000.0
-                                score = (2.0 * dist_component) + goal_component + (0.1 * avg_reward)
+                                score = -float(best_dist) + (goal_rate * 1000.0)
                             scores.append((model_id, score))
                             metrics_list.append((model_id, metrics, latest_path))
                             if stamped_path:
