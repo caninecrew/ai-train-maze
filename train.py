@@ -975,17 +975,17 @@ def main():
         start_cycle = time.time()
         if cfg.game == "maze":
             auto_goal = _auto_goal_enabled()
-        if auto_goal:
-            auto_settings = _auto_training_goal_from_metrics(cfg)
-            if auto_settings:
-                os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
-                os.environ["MAZE_TRAIN_GOAL_FRACTION"] = auto_settings.get("train_goal_fraction", "")
+            if auto_goal:
+                auto_settings = _auto_training_goal_from_metrics(cfg)
+                if auto_settings:
+                    os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
+                    os.environ["MAZE_TRAIN_GOAL_FRACTION"] = auto_settings.get("train_goal_fraction", "")
                     if auto_settings.get("train_goal"):
                         print(f"[cycle {cycle}] Auto training goal: {auto_settings.get('train_goal')}")
                     if auto_settings.get("train_goal_fraction"):
                         print(f"[cycle {cycle}] Auto training goal fraction: {auto_settings.get('train_goal_fraction')}")
-            train_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()
-            train_goal_fraction = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
+                train_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()
+                train_goal_fraction = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
 
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
