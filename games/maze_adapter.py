@@ -165,7 +165,7 @@ class MazeEnv(gym.Env):
                 self._visited.add(self._agent)
                 self._novel_steps += 1
             else:
-                reward += -0.05
+                reward += -0.02
             reverse_map = {0: 1, 1: 0, 2: 3, 3: 2}
             if self._prev_action is not None and action == reverse_map.get(self._prev_action):
                 reward += self._backtrack_penalty
