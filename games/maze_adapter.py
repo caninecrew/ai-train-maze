@@ -400,7 +400,25 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         rewards.append(ep_reward)
         lengths.append(ep_steps)
         stats = env.get_eval_stats() if hasattr(env, "get_eval_stats") else {}
-        goals.append(float(stats.get("goal_reached", 0.0)))
+        goal_reached = float(stats.get("goal_reached", 0.0))
+        if not goal_reached:
+            best_dist_val = stats.get("best_dist")
+            final_row = stats.get("final_row")
+            final_col = stats.get("final_col")
+            goal_row = stats.get("goal_row")
+            goal_col = stats.get("goal_col")
+            if best_dist_val is not None and float(best_dist_val) <= 0.0:
+                goal_reached = 1.0
+            elif (
+                final_row is not None
+                and final_col is not None
+                and goal_row is not None
+                and goal_col is not None
+                and int(final_row) == int(goal_row)
+                and int(final_col) == int(goal_col)
+            ):
+                goal_reached = 1.0
+        goals.append(goal_reached)
         best_dists.append(float(stats.get("best_dist", 0.0)))
         best_progress.append(float(stats.get("best_progress", 0.0)))
         steps.append(float(stats.get("steps", ep_steps)))

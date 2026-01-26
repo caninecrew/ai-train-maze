@@ -143,6 +143,71 @@ def record_video_segment(
     return frames
 
 
+def record_video_segment_with_goal(
+    game,
+    model: PPO,
+    steps: int = 400,
+    overlay_text: str = "",
+    resolution: Tuple[int, int] = (320, 192),
+    variant: Optional[int] = None,
+) -> Tuple[List[np.ndarray], bool]:
+    """
+    Roll out a short episode and report whether the goal was reached.
+    """
+    env = game.make_env(render_mode="rgb_array", variant=variant)
+    obs, _ = env.reset()
+    frames: List[np.ndarray] = []
+    target_size = resolution
+    goal_reached = False
+
+    frame = env.render()
+    if frame is not None:
+        img = Image.fromarray(frame)
+        if img.size != target_size:
+            resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
+            if resample is None:
+                resample = getattr(Image, "NEAREST", 0)
+            img = img.resize(target_size, resample=resample)
+        footer = ""
+        try:
+            if hasattr(env, "get_agent_cell"):
+                r, c = env.get_agent_cell()
+                footer = f"agent=({r},{c})"
+        except Exception:
+            footer = ""
+        frames.append(_add_overlay(np.array(img), overlay_text, footer=footer))
+
+    for _ in range(steps):
+        action, _ = model.predict(obs, deterministic=True)
+        obs, _, terminated, truncated, _ = env.step(action)
+        frame = env.render()
+        if frame is not None:
+            img = Image.fromarray(frame)
+            if img.size != target_size:
+                resample = getattr(getattr(Image, "Resampling", Image), "NEAREST", None)
+                if resample is None:
+                    resample = getattr(Image, "NEAREST", 0)
+                img = img.resize(target_size, resample=resample)
+            footer = ""
+            try:
+                if hasattr(env, "get_agent_cell"):
+                    r, c = env.get_agent_cell()
+                    footer = f"agent=({r},{c})"
+            except Exception:
+                footer = ""
+            frames.append(_add_overlay(np.array(img), overlay_text, footer=footer))
+        if terminated or truncated:
+            break
+    try:
+        if hasattr(env, "get_eval_stats"):
+            stats = env.get_eval_stats()
+            goal_reached = bool(stats.get("goal_reached", 0.0))
+    except Exception:
+        goal_reached = False
+    env.close()
+    return frames, goal_reached
+
+
 def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
     """
     Arrange per-model segments into a grid per timestep.
@@ -1191,7 +1256,7 @@ def main():
                     score = -float(best_dist) + (goal_rate * 1000.0)
                 scored_candidates.append((model_id, score, goal_rate))
             best_id = max(scored_candidates, key=lambda t: t[1])[0] if scored_candidates else None
-            solvers = [mid for mid, _, goal_rate in scored_candidates if goal_rate > 0.0]
+            solvers = [mid for mid, _, _ in scored_candidates]
 
             capture_models: List[Tuple[str, str, str]] = []
             for model_id, metrics, model_path in metrics_list:
@@ -1211,20 +1276,44 @@ def main():
                 if solver_path:
                     capture_models.append((f"{solver_id}_solved", solver_path, f"{solver_id} | SOLVED"))
 
+            solved_retries_env = os.getenv("MAZE_SOLVED_VIDEO_RETRIES", "").strip()
+            try:
+                solved_retries = max(1, int(solved_retries_env)) if solved_retries_env else 3
+            except ValueError:
+                solved_retries = 3
+
             for label, model_path, overlay in capture_models:
                 try:
                     model = PPO.load(model_path, device="cpu")
                     variant = None
                     if label in model_ids:
                         variant = model_ids.index(label)
-                    segment = record_video_segment(
-                        game,
-                        model,
-                        steps=cfg.video_steps,
-                        overlay_text=overlay,
-                        resolution=_parse_resolution(cfg.video_resolution),
-                        variant=variant,
-                    )
+                    if label.endswith("_solved"):
+                        segment = []
+                        goal_hit = False
+                        for _ in range(solved_retries):
+                            segment, goal_hit = record_video_segment_with_goal(
+                                game,
+                                model,
+                                steps=cfg.video_steps,
+                                overlay_text=overlay,
+                                resolution=_parse_resolution(cfg.video_resolution),
+                                variant=variant,
+                            )
+                            if goal_hit:
+                                break
+                        if not goal_hit:
+                            print(f"[{label}] Skipping SOLVED tag (goal not reached in {solved_retries} tries).")
+                            continue
+                    else:
+                        segment = record_video_segment(
+                            game,
+                            model,
+                            steps=cfg.video_steps,
+                            overlay_text=overlay,
+                            resolution=_parse_resolution(cfg.video_resolution),
+                            variant=variant,
+                        )
                     if segment:
                         combined_frames_per_model.append(segment)
                         segments_by_model[label] = segment
