@@ -134,7 +134,7 @@ def record_video_segment(
                 footer = ""
             frames.append(_add_overlay(np.array(img), overlay_text, footer=footer))
         if terminated or truncated:
-            obs, _ = env.reset()
+            break
 
     env.close()
     return frames
