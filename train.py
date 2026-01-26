@@ -179,6 +179,7 @@ def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
             for c in range(cols):
                 idx = r * cols + c
                 if idx >= num_models:
+                    row_tiles.append(np.zeros((max_h, max_w, 3), dtype=np.uint8))
                     continue
                 seg = segments[idx]
                 if seg:
@@ -186,6 +187,8 @@ def build_grid_frames(segments: List[List[np.ndarray]]) -> List[np.ndarray]:
                         row_tiles.append(_pad(seg[i]))
                     else:
                         row_tiles.append(_pad(seg[-1]))  # hold last frame if shorter
+                else:
+                    row_tiles.append(np.zeros((max_h, max_w, 3), dtype=np.uint8))
             if row_tiles:
                 row_images.append(np.concatenate(row_tiles, axis=1))
         if row_images:
