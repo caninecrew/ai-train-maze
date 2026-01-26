@@ -1,5 +1,6 @@
 defaults:
-  game: template
+  game: maze
+  device: cpu
   train_timesteps: 300000
   n_steps: 256
   batch_size: 512

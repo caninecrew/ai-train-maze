@@ -1,6 +1,8 @@
 name: maze
 
 defaults:
+  game: maze
+  device: cpu
   n_envs: 8
   n_steps: 512
   batch_size: 1024
