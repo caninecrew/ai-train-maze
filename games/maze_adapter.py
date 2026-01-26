@@ -49,8 +49,8 @@ class MazeEnv(gym.Env):
         else:
             self._max_steps = int(self._rows * self._cols * 0.75)
         self._step_count = 0
-        self._wall_penalty = -1.0
-        self._consec_wall_penalty = -0.5
+        self._wall_penalty = -0.5
+        self._consec_wall_penalty = -0.25
         self._step_penalty = -0.0005
         self._goal_bonus = 500.0
         self._idle_penalty = -0.001
@@ -124,6 +124,18 @@ class MazeEnv(gym.Env):
                 self._backtrack_penalty = float(backtrack_penalty_env)
             except ValueError:
                 self._backtrack_penalty = -0.2
+        wall_penalty_env = os.getenv("MAZE_WALL_PENALTY", "").strip()
+        if wall_penalty_env:
+            try:
+                self._wall_penalty = float(wall_penalty_env)
+            except ValueError:
+                self._wall_penalty = -0.5
+        consec_wall_penalty_env = os.getenv("MAZE_CONSEC_WALL_PENALTY", "").strip()
+        if consec_wall_penalty_env:
+            try:
+                self._consec_wall_penalty = float(consec_wall_penalty_env)
+            except ValueError:
+                self._consec_wall_penalty = -0.25
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
