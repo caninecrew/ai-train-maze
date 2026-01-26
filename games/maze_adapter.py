@@ -58,6 +58,7 @@ class MazeEnv(gym.Env):
         self._backtrack_penalty = -0.1
         self._best_dist_bonus = 0.35
         self._best_dist_hit_bonus = 1.0
+        self._best_progress_bonus = 0.1
 
         start = self._meta.get("start")
         goal = self._meta.get("goal")
@@ -131,6 +132,7 @@ class MazeEnv(gym.Env):
         self._prev_dist = self._dist_at(self._agent)
         self._best_dist = self._prev_dist
         self._best_dist_hits = 0
+        self._start_dist = self._prev_dist
         self._visited = {self._agent}
         self._last_pos = self._agent
         self._prev_action = None
@@ -172,6 +174,9 @@ class MazeEnv(gym.Env):
         if terminated:
             reward += self._goal_bonus
         truncated = self._step_count >= self._max_steps
+        if terminated or truncated:
+            if np.isfinite(self._start_dist) and np.isfinite(self._best_dist):
+                reward += self._best_progress_bonus * (self._start_dist - self._best_dist)
         return self._obs(), reward, terminated, truncated, {}
 
     def _dist_at(self, pos: tuple[int, int]) -> float:
