@@ -4,6 +4,8 @@ import multiprocessing as mp
 import csv
 import json
 import os
+import subprocess
+import sys
 import traceback
 import random
 import shutil
@@ -271,6 +273,16 @@ class TrainConfig:
     worker_watchdog: bool = True
     list_games: bool = False
     export_config: Optional[str] = None
+    evo_first: bool = False
+    evo_cycles: int = 20
+    evo_population: int = 50
+    evo_max_steps: int = 2400
+    evo_sensor_range: int = 20
+    evo_top_k: int = 10
+    evo_batch_size: int = 100
+    evo_epochs: int = 15
+    evo_learning_rate: float = 1e-3
+    evo_model_path: str = "models/evo_maze.pt"
 
     @property
     def max_video_frames(self) -> int:
@@ -472,6 +484,16 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--top-k-checkpoints", type=int, default=defaults_from_file.get("top_k_checkpoints", TrainConfig.top_k_checkpoints))
     parser.add_argument("--no-checkpoint", action="store_true", default=defaults_from_file.get("no_checkpoint", TrainConfig.no_checkpoint))
     parser.add_argument("--individual-videos", action="store_true", default=defaults_from_file.get("individual_videos", TrainConfig.individual_videos))
+    parser.add_argument("--evo-first", action="store_true", default=defaults_from_file.get("evo_first", TrainConfig.evo_first), help="Run evolutionary maze pretraining before PPO (maze only).")
+    parser.add_argument("--evo-cycles", type=int, default=defaults_from_file.get("evo_cycles", TrainConfig.evo_cycles))
+    parser.add_argument("--evo-population", type=int, default=defaults_from_file.get("evo_population", TrainConfig.evo_population))
+    parser.add_argument("--evo-max-steps", type=int, default=defaults_from_file.get("evo_max_steps", TrainConfig.evo_max_steps))
+    parser.add_argument("--evo-sensor-range", type=int, default=defaults_from_file.get("evo_sensor_range", TrainConfig.evo_sensor_range))
+    parser.add_argument("--evo-top-k", type=int, default=defaults_from_file.get("evo_top_k", TrainConfig.evo_top_k))
+    parser.add_argument("--evo-batch-size", type=int, default=defaults_from_file.get("evo_batch_size", TrainConfig.evo_batch_size))
+    parser.add_argument("--evo-epochs", type=int, default=defaults_from_file.get("evo_epochs", TrainConfig.evo_epochs))
+    parser.add_argument("--evo-learning-rate", type=float, default=defaults_from_file.get("evo_learning_rate", TrainConfig.evo_learning_rate))
+    parser.add_argument("--evo-model-path", type=str, default=defaults_from_file.get("evo_model_path", TrainConfig.evo_model_path))
     parser.add_argument("--cpu-affinity", type=str, default=defaults_from_file.get("cpu_affinity", TrainConfig.cpu_affinity))
     parser.add_argument("--num-threads", type=int, default=defaults_from_file.get("num_threads", TrainConfig.num_threads) or None, help="Override torch.num_threads.")
     parser.add_argument("--video-dir", type=str, default=defaults_from_file.get("video_dir", TrainConfig.video_dir))
@@ -514,6 +536,16 @@ def parse_args() -> TrainConfig:
         top_k_checkpoints=args.top_k_checkpoints,
         no_checkpoint=args.no_checkpoint,
         individual_videos=args.individual_videos,
+        evo_first=args.evo_first,
+        evo_cycles=args.evo_cycles,
+        evo_population=args.evo_population,
+        evo_max_steps=args.evo_max_steps,
+        evo_sensor_range=args.evo_sensor_range,
+        evo_top_k=args.evo_top_k,
+        evo_batch_size=args.evo_batch_size,
+        evo_epochs=args.evo_epochs,
+        evo_learning_rate=args.evo_learning_rate,
+        evo_model_path=args.evo_model_path,
         cpu_affinity=args.cpu_affinity,
         num_threads=args.num_threads,
         video_dir=args.video_dir,
@@ -867,6 +899,43 @@ def _train_single(
     return model_id, metrics, timestamp, latest_path, stamped_model_path
 
 
+def _run_evo_pretrain(cfg: TrainConfig) -> None:
+    if cfg.game != "maze":
+        print("Evo pretraining is only supported for game=maze; skipping.")
+        return
+    maze_id = os.getenv("MAZE_ID", "")
+    maze_dir = os.getenv("MAZE_DIR", "data/mazes")
+    evo_cmd = [
+        sys.executable,
+        "scripts/mazes/evo_train.py",
+        "--maze-dir",
+        maze_dir,
+        "--maze-id",
+        maze_id,
+        "--cycles",
+        str(cfg.evo_cycles),
+        "--population",
+        str(cfg.evo_population),
+        "--max-steps",
+        str(cfg.evo_max_steps),
+        "--sensor-range",
+        str(cfg.evo_sensor_range),
+        "--top-k",
+        str(cfg.evo_top_k),
+        "--batch-size",
+        str(cfg.evo_batch_size),
+        "--epochs",
+        str(cfg.evo_epochs),
+        "--learning-rate",
+        str(cfg.evo_learning_rate),
+        "--model-path",
+        str(cfg.evo_model_path),
+        "--move-start-on-success",
+    ]
+    print(f"Running evo pretrain: {' '.join(evo_cmd)}")
+    subprocess.run(evo_cmd, check=False)
+
+
 def main():
     cfg = parse_args()
     if cfg.game == "maze":
@@ -951,6 +1020,8 @@ def main():
         env.close()
         print("Dry run: environment initialized successfully. Exiting before training.")
         return
+    if cfg.evo_first:
+        _run_evo_pretrain(cfg)
     model_ids = [f"{model_prefix}_{i}" for i in range(cfg.iterations_per_set)]
     metric_fields = ["avg_reward", "avg_reward_ci", "avg_ep_len", "avg_ep_len_ci"] + list(game.extra_metrics)
     train_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()

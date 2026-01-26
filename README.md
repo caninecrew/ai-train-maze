@@ -104,6 +104,7 @@ Then open `http://127.0.0.1:8000`.
 - GPU profile: `python train.py --game template --profile gpu --iterations-per-set 2 --n-envs 16 --stream-tensorboard`
 - Status check: `python train.py --status`
 - Export resolved config: `python train.py --export-config logs/resolved_config.json`
+- Evo + PPO (maze): `python train.py --game maze --evo-first`
 - Evolutionary maze swarm (ray sensors + A* scoring): `bash scripts/mazes/run_evo_local.sh`
 
 ## Add a new game
