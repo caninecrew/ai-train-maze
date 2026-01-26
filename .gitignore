@@ -30,3 +30,6 @@ tmp_logs/
 *.7z
 *.bat
 
+videos/
+models/
+logs
