@@ -50,6 +50,7 @@ class MazeEnv(gym.Env):
             self._max_steps = int(self._rows * self._cols * 0.75)
         self._step_count = 0
         self._wall_penalty = -2.0
+        self._consec_wall_penalty = -1.0
         self._step_penalty = -0.001
         self._goal_bonus = 500.0
         self._idle_penalty = -0.005
@@ -135,6 +136,7 @@ class MazeEnv(gym.Env):
         self._start_dist = self._prev_dist
         self._visited = {self._agent}
         self._wall_hits = 0
+        self._consec_wall_hits = 0
         self._idle_steps = 0
         self._backtracks = 0
         self._novel_steps = 0
@@ -151,6 +153,7 @@ class MazeEnv(gym.Env):
         reward = self._step_penalty
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
+            self._consec_wall_hits = 0
             new_dist = self._dist_at(self._agent)
             if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
@@ -173,6 +176,9 @@ class MazeEnv(gym.Env):
         else:
             reward += self._wall_penalty
             self._wall_hits += 1
+            self._consec_wall_hits += 1
+            if self._consec_wall_hits > 1:
+                reward += self._consec_wall_penalty * (self._consec_wall_hits - 1)
         if self._agent == (r, c):
             reward += self._idle_penalty
             self._idle_steps += 1
