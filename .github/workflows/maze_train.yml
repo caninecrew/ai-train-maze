@@ -39,6 +39,18 @@ on:
         description: "Max steps per episode (maze env)"
         required: false
         default: "2400"
+      train_mode:
+        description: "Use training goal override (curriculum)"
+        required: false
+        default: "true"
+      train_goal:
+        description: "Optional training goal override (row,col)"
+        required: false
+        default: ""
+      train_goal_fraction:
+        description: "Fraction toward goal for training target (0.1-0.9)"
+        required: false
+        default: "0.35"
       train_timesteps:
         description: "Train timesteps per cycle"
         required: false
@@ -136,6 +148,9 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
           MAZE_MAX_STEPS: ${{ inputs.max_steps }}
+          MAZE_TRAIN_MODE: ${{ inputs.train_mode }}
+          MAZE_TRAIN_GOAL: ${{ inputs.train_goal }}
+          MAZE_TRAIN_GOAL_FRACTION: ${{ inputs.train_goal_fraction }}
         run: |
           mkdir -p videos models logs
           best_resume="$(python3 scripts/mazes/find_best_checkpoint.py 2>/dev/null || true)"

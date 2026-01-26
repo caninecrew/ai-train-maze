@@ -60,7 +60,8 @@ class MazeEnv(gym.Env):
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
-        self._goal = self._sanitize_point(goal, fallback="goal")
+        base_goal = self._sanitize_point(goal, fallback="goal")
+        self._goal = self._apply_training_goal(base_goal)
         self._dist_map = self._compute_distances(self._goal)
 
         self.action_space = spaces.Discrete(4)
@@ -89,6 +90,36 @@ class MazeEnv(gym.Env):
         if opens.size == 0:
             raise ValueError("Maze has no open cells.")
         return tuple(opens[-1])
+
+    def _apply_training_goal(self, base_goal: tuple[int, int]) -> tuple[int, int]:
+        train_mode = os.getenv("MAZE_TRAIN_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+        if not train_mode:
+            return base_goal
+        raw_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()
+        if raw_goal:
+            parts = raw_goal.replace(" ", "").split(",")
+            if len(parts) == 2:
+                try:
+                    r, c = int(parts[0]), int(parts[1])
+                    if 0 <= r < self._rows and 0 <= c < self._cols and self._grid[r, c] == 0:
+                        return (r, c)
+                except ValueError:
+                    pass
+        dist_start = self._compute_distances(self._start)
+        goal_dist = dist_start[base_goal]
+        if not np.isfinite(goal_dist) or goal_dist < 2:
+            return base_goal
+        fraction_env = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
+        try:
+            fraction = float(fraction_env) if fraction_env else 0.35
+        except ValueError:
+            fraction = 0.35
+        fraction = max(0.1, min(0.9, fraction))
+        target_dist = max(1, int(goal_dist * fraction))
+        candidates = np.argwhere(dist_start == target_dist)
+        if candidates.size == 0:
+            return base_goal
+        return tuple(candidates[0])
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         if seed is not None:
