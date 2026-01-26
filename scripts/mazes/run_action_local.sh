@@ -73,7 +73,7 @@ if [ -n "$best_resume" ]; then
 fi
 
 if [ -z "$TRAIN_ARGS" ]; then
-  TRAIN_ARGS="--n-steps 512 --batch-size 1024 --n-epochs 3 --video-steps 600 --max-video-seconds 20 --target-fps 30"
+  TRAIN_ARGS="--n-steps 512 --batch-size 1024 --n-epochs 3 --video-steps 600 --max-video-seconds 20 --target-fps 30 --individual-videos"
 fi
 
 python3 train.py \
