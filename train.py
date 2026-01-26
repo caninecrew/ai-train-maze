@@ -8,6 +8,7 @@ import traceback
 import random
 import shutil
 import time
+import re
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -376,6 +377,62 @@ def _auto_goal_enabled() -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
+def _latest_run_timestamp_from_logs(log_dir: str) -> Optional[str]:
+    log_path = Path(log_dir)
+    if not log_path.exists():
+        return None
+
+    jsonl_candidates = sorted(log_path.glob("train_run_*.jsonl"), reverse=True)
+    for path in jsonl_candidates:
+        try:
+            first_line = path.read_text(encoding="utf-8").splitlines()[0]
+            payload = json.loads(first_line)
+            run_ts = payload.get("resolved_at") or payload.get("run_timestamp")
+            if run_ts:
+                return str(run_ts)
+        except Exception:
+            continue
+
+    json_candidates = sorted(log_path.glob("run_report_*.json"), reverse=True)
+    for path in json_candidates:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            run_ts = payload.get("summary", {}).get("run_timestamp")
+            if run_ts:
+                return str(run_ts)
+        except Exception:
+            continue
+
+    html_candidates = sorted(log_path.glob("run_report_*.html"), reverse=True)
+    for path in html_candidates:
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            match = re.search(r"run_timestamp\\\":\\s*\\\"(\\d{8}-\\d{6})\\\"", content)
+            if match:
+                return match.group(1)
+        except Exception:
+            continue
+    return None
+
+
+def _metrics_fieldnames_for_game(game_name: str, extra_metrics: List[str]) -> List[str]:
+    return [
+        "cycle",
+        "model_id",
+        "avg_reward",
+        "avg_reward_ci",
+        "avg_ep_len",
+        "avg_ep_len_ci",
+        *extra_metrics,
+        "delta_reward",
+        "train_goal",
+        "train_goal_fraction",
+        "timestamp",
+        "run_timestamp",
+        "game",
+    ]
+
+
 def parse_args() -> TrainConfig:
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument("--config", type=str, help="Path to YAML/JSON config to merge.")
@@ -593,8 +650,21 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     latest_by_run: Dict[str, Dict[str, Any]] = {}
     try:
         with metrics_path.open("r", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
-            for row in reader:
+            first_line = fh.readline()
+            fh.seek(0)
+            has_header = "cycle" in first_line and "model_id" in first_line and "game" in first_line
+            if has_header:
+                reader = csv.DictReader(fh)
+                rows = list(reader)
+            else:
+                game = get_game("maze")
+                fieldnames = _metrics_fieldnames_for_game("maze", list(game.extra_metrics))
+                raw_rows = csv.reader(fh)
+                rows = []
+                for raw in raw_rows:
+                    padded = raw + [""] * max(0, len(fieldnames) - len(raw))
+                    rows.append(dict(zip(fieldnames, padded[: len(fieldnames)])))
+            for row in rows:
                 if row.get("game") != "maze":
                     continue
                 run_id = row.get("run_timestamp") or ""
@@ -629,7 +699,8 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
         return None
     if not latest_by_run:
         return None
-    last_run = sorted(latest_by_run.keys())[-1]
+    preferred_run = _latest_run_timestamp_from_logs(cfg.log_dir)
+    last_run = preferred_run if preferred_run in latest_by_run else sorted(latest_by_run.keys())[-1]
     stats = latest_by_run[last_run]
     fraction_env = stats.get("train_goal_fraction") or os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
     try:
@@ -904,15 +975,17 @@ def main():
         start_cycle = time.time()
         if cfg.game == "maze":
             auto_goal = _auto_goal_enabled()
-            if auto_goal:
-                auto_settings = _auto_training_goal_from_metrics(cfg)
-                if auto_settings:
-                    os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
-                    os.environ["MAZE_TRAIN_GOAL_FRACTION"] = auto_settings.get("train_goal_fraction", "")
+        if auto_goal:
+            auto_settings = _auto_training_goal_from_metrics(cfg)
+            if auto_settings:
+                os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
+                os.environ["MAZE_TRAIN_GOAL_FRACTION"] = auto_settings.get("train_goal_fraction", "")
                     if auto_settings.get("train_goal"):
                         print(f"[cycle {cycle}] Auto training goal: {auto_settings.get('train_goal')}")
                     if auto_settings.get("train_goal_fraction"):
                         print(f"[cycle {cycle}] Auto training goal fraction: {auto_settings.get('train_goal_fraction')}")
+            train_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()
+            train_goal_fraction = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
 
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
