@@ -566,17 +566,28 @@ def _best_checkpoint_from_metrics(cfg: TrainConfig, model_prefix: str) -> Option
 def _git_commit_artifacts(cfg: TrainConfig, message: str) -> None:
     if os.getenv("CI", "").lower() != "true":
         return
+    if os.getenv("TRAIN_DISABLE_GIT", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return
     try:
-        if os.system("git rev-parse --is-inside-work-tree > /dev/null 2>&1") != 0:
+        import subprocess
+
+        def _run(cmd: list[str], timeout: int = 30) -> bool:
+            try:
+                result = subprocess.run(cmd, check=False, capture_output=True, timeout=timeout)
+                return result.returncode == 0
+            except Exception:
+                return False
+
+        if not _run(["git", "rev-parse", "--is-inside-work-tree"]):
             return
-        os.system('git config user.name "github-actions[bot]"')
-        os.system('git config user.email "github-actions[bot]@users.noreply.github.com"')
-        os.system("git pull --rebase --autostash")
-        os.system(f'git add "{cfg.model_dir}" "{cfg.video_dir}" "{cfg.log_dir}" || true')
-        if os.system("git diff --cached --quiet") == 0:
+        _run(["git", "config", "user.name", "github-actions[bot]"])
+        _run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"])
+        _run(["git", "pull", "--rebase", "--autostash"], timeout=60)
+        _run(["git", "add", cfg.model_dir, cfg.video_dir, cfg.log_dir], timeout=30)
+        if _run(["git", "diff", "--cached", "--quiet"], timeout=15):
             return
-        os.system(f'git commit -m "{message}"')
-        os.system("git push")
+        _run(["git", "commit", "-m", message], timeout=30)
+        _run(["git", "push"], timeout=60)
     except Exception:
         pass
 

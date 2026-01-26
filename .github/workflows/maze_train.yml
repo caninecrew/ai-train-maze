@@ -151,6 +151,7 @@ jobs:
           MAZE_TRAIN_MODE: ${{ inputs.train_mode }}
           MAZE_TRAIN_GOAL: ${{ inputs.train_goal }}
           MAZE_TRAIN_GOAL_FRACTION: ${{ inputs.train_goal_fraction }}
+          TRAIN_DISABLE_GIT: "true"
         run: |
           mkdir -p videos models logs
           best_resume="$(python3 scripts/mazes/find_best_checkpoint.py 2>/dev/null || true)"
