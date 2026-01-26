@@ -1181,23 +1181,56 @@ def main():
             break
 
         if cfg.video_steps > 0 and metrics_list:
+            scored_candidates = []
+            for model_id, metrics, _ in metrics_list:
+                best_dist = metrics.get("best_dist")
+                goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
+                if best_dist is None:
+                    score = float("-inf")
+                else:
+                    score = -float(best_dist) + (goal_rate * 1000.0)
+                scored_candidates.append((model_id, score, goal_rate))
+            best_id = max(scored_candidates, key=lambda t: t[1])[0] if scored_candidates else None
+            solvers = [mid for mid, _, goal_rate in scored_candidates if goal_rate > 0.0]
+
+            capture_models: List[Tuple[str, str, str]] = []
             for model_id, metrics, model_path in metrics_list:
+                capture_models.append(
+                    (
+                        model_id,
+                        model_path,
+                        f"{model_id} | r {metrics.get('avg_reward', 0.0):.2f}",
+                    )
+                )
+            if best_id:
+                best_path = next((p for mid, _, p in metrics_list if mid == best_id), "")
+                if best_path:
+                    capture_models.append((f"{best_id}_best", best_path, f"{best_id} | BEST"))
+            for solver_id in solvers:
+                solver_path = next((p for mid, _, p in metrics_list if mid == solver_id), "")
+                if solver_path:
+                    capture_models.append((f"{solver_id}_solved", solver_path, f"{solver_id} | SOLVED"))
+
+            for label, model_path, overlay in capture_models:
                 try:
                     model = PPO.load(model_path, device="cpu")
+                    variant = None
+                    if label in model_ids:
+                        variant = model_ids.index(label)
                     segment = record_video_segment(
                         game,
                         model,
                         steps=cfg.video_steps,
-                        overlay_text=f"{model_id} | r {metrics.get('avg_reward', 0.0):.2f}",
+                        overlay_text=overlay,
                         resolution=_parse_resolution(cfg.video_resolution),
-                        variant=model_ids.index(model_id),
+                        variant=variant,
                     )
                     if segment:
                         combined_frames_per_model.append(segment)
-                        segments_by_model[model_id] = segment
-                    print(f"[{model_id}] Added {len(segment)} frames.")
+                        segments_by_model[label] = segment
+                    print(f"[{label}] Added {len(segment)} frames.")
                 except Exception as exc:
-                    print(f"[{model_id}] Video capture failed: {exc}")
+                    print(f"[{label}] Video capture failed: {exc}")
         else:
             print("Video capture disabled or no models; skipping video accumulation.")
 
@@ -1355,6 +1388,13 @@ def main():
                 indiv_path = Path(cfg.video_dir) / f"{model_id}_{timestamp}_seed{base_seed}.mp4"
                 if _safe_write_video(frames, indiv_path, cfg.target_fps):
                     print(f"[{model_id}] Saved individual video: {indiv_path}")
+        if segments_by_model:
+            for model_id, frames in segments_by_model.items():
+                if not frames or not (model_id.endswith("_best") or model_id.endswith("_solved")):
+                    continue
+                tagged_path = Path(cfg.video_dir) / f"{model_id}_{timestamp}_seed{base_seed}.mp4"
+                if _safe_write_video(frames, tagged_path, cfg.target_fps):
+                    print(f"[{model_id}] Saved tagged video: {tagged_path}")
 
         if tb_writer:
             for model_id, metrics, _ in metrics_list:
