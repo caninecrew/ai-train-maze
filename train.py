@@ -718,13 +718,15 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     else:
         if best_dist > 40.0:
             fraction = min(fraction, 0.2)
-        if goal_rate < 0.5:
-            fraction = min(fraction, 0.15)
-        if goal_rate == 0.0:
+        if goal_rate < 0.8:
             fraction = min(fraction, 0.1)
+        if goal_rate < 0.5:
+            fraction = min(fraction, 0.08)
+        if goal_rate == 0.0:
+            fraction = min(fraction, 0.05)
     return {
         "train_goal": train_goal,
-        "train_goal_fraction": str(max(0.1, min(0.9, fraction))),
+        "train_goal_fraction": str(max(0.05, min(0.9, fraction))),
     }
 
 
