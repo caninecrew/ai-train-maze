@@ -58,6 +58,27 @@ def _read_metrics(metrics_csv: Path) -> dict:
     return best or {}
 
 
+def _latest_maze_meta(mazes_dir: Path) -> Dict[str, Any]:
+    if not mazes_dir.exists():
+        return {}
+    meta_files = list(mazes_dir.glob("*/*_meta.json"))
+    if not meta_files:
+        meta_files = list(mazes_dir.glob("*/**/*_meta.json"))
+    if not meta_files:
+        return {}
+    meta_files.sort(key=lambda p: p.stat().st_mtime)
+    meta_path = meta_files[-1]
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(payload, dict):
+        payload.setdefault("maze_id", meta_path.parent.name)
+        payload["path"] = str(meta_path.relative_to(ROOT))
+        return payload
+    return {}
+
+
 def _read_annotations() -> Dict[str, Any]:
     if not _ANNOTATIONS_FILE.exists():
         return {"notes": []}
@@ -235,6 +256,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "metrics": metrics,
                 "report": report,
                 "game": game_context,
+                "maze": _latest_maze_meta(ROOT / "data" / "mazes"),
                 "paths": {
                     "metrics_csv": str(metrics_csv),
                     "latest_report": str(report_path) if report_path else "",
@@ -426,6 +448,8 @@ def _dashboard_html() -> str:
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
     .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
     .controls select, .controls input { background: #0f141b; border: 1px solid #1f2a36; color: var(--text); padding: 6px 8px; border-radius: 6px; }
+    body.maze-mode .maze-hide { display: none; }
+    body:not(.maze-mode) .maze-only { display: none; }
   </style>
 </head>
 <body>
@@ -454,7 +478,7 @@ def _dashboard_html() -> str:
       <h1>Live Training Dashboard</h1>
       <div class="tiny" style="margin-bottom:12px;">
         This page tracks how the AI is learning. Each "cycle" is one round of training and testing.
-        If a number is bigger, that usually means better play (unless noted).
+        Higher reward usually means better navigation. Episode length shows how long the agent wanders.
       </div>
       <div id="panel-overview" class="panel active">
         <div class="kpi-strip">
@@ -469,16 +493,16 @@ def _dashboard_html() -> str:
             <div id="kpiAvgReward" class="stat">--</div>
             <div class="tiny" id="kpiAvgRewardDelta">--</div>
             <div class="tiny">Average score across all models in the latest cycle.</div>
-            <div class="tiny">Reward is the game score: higher means the agent wins more points.</div>
+            <div class="tiny">Reward is the maze score: higher (less negative) is better.</div>
           </div>
-          <div class="card">
+          <div class="card maze-hide">
             <div class="label">Win Rate</div>
             <div id="kpiWinRate" class="stat">--</div>
             <div class="tiny" id="kpiWinRateDelta">--</div>
             <div class="tiny">Fraction of games the AI wins (1.00 = 100%).</div>
             <div class="tiny">Example: 0.25 means 25% of games won.</div>
           </div>
-          <div class="card">
+          <div class="card maze-hide">
             <div class="label">Return Rate</div>
             <div id="kpiReturnRate" class="stat">--</div>
             <div class="tiny" id="kpiReturnRateCi">--</div>
@@ -489,8 +513,8 @@ def _dashboard_html() -> str:
               <div class="label">Episode Length</div>
               <div id="kpiRally" class="stat">--</div>
               <div class="tiny" id="kpiRallyDelta">--</div>
-              <div class="tiny">Average episode length (steps).</div>
-              <div class="tiny">Longer episodes usually mean more sustained play.</div>
+              <div class="tiny">Average steps per episode.</div>
+              <div class="tiny">Lower can mean faster goal reach, higher can mean more wandering.</div>
             </div>
         </div>
         <div class="grid" style="margin-top:16px;">
@@ -500,9 +524,19 @@ def _dashboard_html() -> str:
             <div class="tiny">Model with the highest reward so far.</div>
             <div class="label" style="margin-top:8px;">Avg Reward</div>
             <div id="bestReward">--</div>
-            <div class="label">Win Rate</div>
-            <div id="bestWin">--</div>
+            <div class="label maze-hide">Win Rate</div>
+            <div id="bestWin" class="maze-hide">--</div>
             <div class="tiny">This is the current champion model.</div>
+          </div>
+          <div class="card">
+            <div class="label">Maze</div>
+            <div id="mazeId" class="stat">--</div>
+            <div id="mazeDims" class="tiny">--</div>
+            <div class="label" style="margin-top:8px;">Start</div>
+            <div id="mazeStart">--</div>
+            <div class="label">Goal</div>
+            <div id="mazeGoal">--</div>
+            <div id="mazeMetaPath" class="tiny">--</div>
           </div>
           <div class="card">
             <div class="label">Latest Run</div>
@@ -516,16 +550,17 @@ def _dashboard_html() -> str:
           </div>
           <div class="card">
             <div class="label">Heatmaps</div>
-            <div class="tiny">Where the ball and paddles spend time. Brighter means more activity.</div>
+            <div class="tiny">Where the agent spends time. Brighter means more activity.</div>
             <div class="menu" style="margin-bottom:8px;">
-              <button data-heat="ball" class="active">Ball Density</button>
-              <button data-heat="paddles">Paddle Density</button>
-              <button data-heat="hits">Hit Hotspots</button>
-              <button data-heat="scores">Score Zones</button>
+              <button data-heat="agent" class="maze-only">Agent Density</button>
+              <button data-heat="ball" class="maze-hide active">Ball Density</button>
+              <button data-heat="paddles" class="maze-hide">Paddle Density</button>
+              <button data-heat="hits" class="maze-hide">Hit Hotspots</button>
+              <button data-heat="scores" class="maze-hide">Score Zones</button>
             </div>
             <div class="controls">
               <label class="tiny"><input type="checkbox" id="heatLog"/> Log scale</label>
-              <label class="tiny"><input type="checkbox" id="heatOverlay" checked/> Court overlay</label>
+              <label class="tiny maze-hide"><input type="checkbox" id="heatOverlay" checked/> Court overlay</label>
             </div>
             <canvas id="heatmap" width="400" height="400"></canvas>
             <div class="legend" style="margin-top:8px;">
@@ -540,7 +575,7 @@ def _dashboard_html() -> str:
             <div class="tiny">Use this to decide if the model is "good enough" to keep.</div>
             <div class="controls">
               <input id="gateReward" type="number" step="0.1" placeholder="Reward > X"/>
-              <input id="gateWin" type="number" step="0.01" placeholder="Win rate > Y"/>
+              <input id="gateWin" class="maze-hide" type="number" step="0.01" placeholder="Win rate > Y"/>
             </div>
             <div id="gateStatus" class="tiny">--</div>
           </div>
@@ -565,7 +600,7 @@ def _dashboard_html() -> str:
               <div class="label">Avg Reward (per cycle)</div>
               <canvas id="chartReward" width="500" height="200"></canvas>
             </div>
-            <div>
+            <div class="maze-hide">
               <div class="label">Win Rate (per cycle)</div>
               <canvas id="chartWin" width="500" height="200"></canvas>
             </div>
@@ -602,14 +637,14 @@ def _dashboard_html() -> str:
           </div>
           <div class="card">
             <div class="label">Correlations</div>
-            <div class="tiny">See if longer rallies or better returns link to higher reward.</div>
-            <div class="tiny">Upward trend = that metric helps the reward.</div>
+            <div class="tiny">See if longer episodes link to higher reward.</div>
+            <div class="tiny maze-hide">Upward trend can mean that return rate helps the reward.</div>
             <div class="split">
               <div>
                 <div class="label">Reward vs Episode Length</div>
                 <canvas id="scatterRally" width="400" height="200"></canvas>
               </div>
-              <div>
+              <div class="maze-hide">
                 <div class="label">Reward vs Return Rate</div>
                 <canvas id="scatterReturn" width="400" height="200"></canvas>
               </div>
@@ -658,8 +693,8 @@ def _dashboard_html() -> str:
           </div>
           <div class="card">
             <div class="label">Video Insights</div>
-            <div class="tiny">Highlights from the longest rallies.</div>
-            <div class="tiny">Long rallies often show strong defense.</div>
+            <div class="tiny">Highlights from the longest episodes.</div>
+            <div class="tiny">Long episodes often mean the agent is still exploring.</div>
             <div id="videoInsights" class="tiny">--</div>
           </div>
           <div class="card">
@@ -737,9 +772,9 @@ def _dashboard_html() -> str:
                 <th>Model</th>
                 <th>Avg Reward</th>
                 <th>Delta</th>
-                <th>Win Rate</th>
-                  <th>Episode Len</th>
-                <th>Return</th>
+                <th class="maze-hide">Win Rate</th>
+                <th>Episode Len</th>
+                <th class="maze-hide">Return</th>
               </tr>
             </thead>
             <tbody id="metricsTable"></tbody>
@@ -762,6 +797,8 @@ let compareMode = "avg";
 let rollingEnabled = false;
 let activePanel = "overview";
 let lastReportKey = "";
+let isMaze = false;
+let lastMazeMode = null;
 const apiBase = (() => {
   const params = new URLSearchParams(window.location.search);
   const override = params.get('api') || '';
@@ -775,17 +812,65 @@ function apiFetch(path, options) {
   return fetch(`${apiBase}${path}`, options);
 }
 
+function updateSnapshotOptions() {
+  const ids = ['chartReward', 'chartWin', 'chartDelta', 'chartRally', 'histReward', 'histRally', 'scatterRally', 'scatterReturn', 'heatmap'];
+  const filtered = isMaze ? ids.filter(id => !['chartWin', 'scatterReturn'].includes(id)) : ids;
+  const select = document.getElementById('snapshotSelect');
+  if (!select) return;
+  select.innerHTML = '';
+  filtered.forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = id;
+    select.appendChild(opt);
+  });
+}
+
+function setHeatmapMode(mode) {
+  heatmapMode = mode;
+  document.querySelectorAll('.card .menu button[data-heat]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-heat') === mode);
+  });
+}
+
 async function refreshStatus() {
   try {
     const res = await apiFetch('/api/status');
     const data = await res.json();
       const metrics = data.metrics || {};
       const report = (data.report || {}).summary || {};
+      const gameName = (data.game || {}).game || 'template';
+      isMaze = gameName === 'maze';
+      if (lastMazeMode === null || lastMazeMode !== isMaze) {
+        updateSnapshotOptions();
+        lastMazeMode = isMaze;
+      }
+      document.body.classList.toggle('maze-mode', isMaze);
+      if (isMaze && heatmapMode !== 'agent') {
+        setHeatmapMode('agent');
+      }
+      if (!isMaze && heatmapMode === 'agent') {
+        setHeatmapMode('ball');
+      }
       const winRate = (metrics.win_rate === null || metrics.win_rate === undefined || metrics.win_rate === '') ? '--' : metrics.win_rate;
       const avgReward = (metrics.avg_reward === null || metrics.avg_reward === undefined || metrics.avg_reward === '') ? '--' : metrics.avg_reward;
       document.getElementById('bestModel').textContent = metrics.model_id || 'n/a';
       document.getElementById('bestReward').textContent = avgReward;
-      document.getElementById('bestWin').textContent = winRate;
+      if (!isMaze) {
+        document.getElementById('bestWin').textContent = winRate;
+      }
+      const mazeMeta = data.maze || {};
+      document.getElementById('mazeId').textContent = mazeMeta.maze_id || '--';
+      if (mazeMeta.rows && mazeMeta.cols) {
+        document.getElementById('mazeDims').textContent = `${mazeMeta.rows} rows x ${mazeMeta.cols} cols`;
+      } else {
+        document.getElementById('mazeDims').textContent = '--';
+      }
+      const start = Array.isArray(mazeMeta.start) ? mazeMeta.start : null;
+      const goal = Array.isArray(mazeMeta.goal) ? mazeMeta.goal : null;
+      document.getElementById('mazeStart').textContent = start ? `(${start[0]}, ${start[1]})` : '--';
+      document.getElementById('mazeGoal').textContent = goal ? `(${goal[0]}, ${goal[1]})` : '--';
+      document.getElementById('mazeMetaPath').textContent = mazeMeta.path ? `Meta: ${mazeMeta.path}` : '--';
     document.getElementById('runId').textContent = report.run_timestamp || '--';
     document.getElementById('stopReason').textContent = report.stop_reason || '--';
     const sources = data.paths || {};
@@ -835,7 +920,8 @@ async function refreshHeatmap() {
     drawEmpty(canvas, 'No heatmap data');
     return;
   }
-  document.getElementById('heatmapNote').textContent = `Live ${heatmapMode} density from latest model.`;
+  const heatLabel = heatmapMode === 'agent' ? 'agent' : heatmapMode;
+  document.getElementById('heatmapNote').textContent = `Live ${heatLabel} density from latest model.`;
   const rows = heat.length;
   const cols = heat[0].length;
   const max = Math.max(...heat.flat());
@@ -848,7 +934,7 @@ async function refreshHeatmap() {
       ctx.fillRect(x * canvas.width / cols, y * canvas.height / rows, canvas.width / cols, canvas.height / rows);
     }
   }
-  if (document.getElementById('heatOverlay').checked) {
+  if (!isMaze && document.getElementById('heatOverlay').checked) {
     drawHeatOverlay(canvas);
   }
   document.getElementById('heatLegend').textContent = `0 -> ${max}`;
@@ -937,9 +1023,7 @@ document.querySelectorAll('.sidebar .menu button[data-panel]').forEach(btn => {
 
 document.querySelectorAll('.card .menu button[data-heat]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.card .menu button[data-heat]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    heatmapMode = btn.getAttribute('data-heat');
+    setHeatmapMode(btn.getAttribute('data-heat'));
     refreshHeatmap();
   });
 });
@@ -954,7 +1038,9 @@ async function refreshCharts() {
     data = await res.json();
   } catch (err) {
     drawEmpty(document.getElementById('chartReward'), 'Metrics fetch failed');
-    drawEmpty(document.getElementById('chartWin'), 'Metrics fetch failed');
+    if (!isMaze) {
+      drawEmpty(document.getElementById('chartWin'), 'Metrics fetch failed');
+    }
     drawEmpty(document.getElementById('chartDelta'), 'Metrics fetch failed');
     drawEmpty(document.getElementById('chartRally'), 'Metrics fetch failed');
     document.getElementById('dataLine').textContent = `Data: error (${err})`;
@@ -962,7 +1048,9 @@ async function refreshCharts() {
   }
   if (data.error) {
     drawEmpty(document.getElementById('chartReward'), 'Metrics error');
-    drawEmpty(document.getElementById('chartWin'), 'Metrics error');
+    if (!isMaze) {
+      drawEmpty(document.getElementById('chartWin'), 'Metrics error');
+    }
     drawEmpty(document.getElementById('chartDelta'), 'Metrics error');
     drawEmpty(document.getElementById('chartRally'), 'Metrics error');
     document.getElementById('dataLine').textContent = `Data: error (${data.error})`;
@@ -971,10 +1059,13 @@ async function refreshCharts() {
   try {
     metricsSeries = data.series || [];
     const series = filterByRun(metricsSeries, selectedRun);
+    const showWin = !isMaze;
     document.getElementById('dataLine').textContent = `Data: ${series.length} rows`;
     if (!series.length) {
       drawEmpty(document.getElementById('chartReward'), 'No metrics yet');
-    drawEmpty(document.getElementById('chartWin'), 'No metrics yet');
+    if (showWin) {
+      drawEmpty(document.getElementById('chartWin'), 'No metrics yet');
+    }
     drawEmpty(document.getElementById('chartDelta'), 'No metrics yet');
     drawEmpty(document.getElementById('chartRally'), 'No metrics yet');
   }
@@ -986,7 +1077,9 @@ async function refreshCharts() {
   for (const row of recent) {
     const tr = document.createElement('tr');
     const epLen = row.avg_ep_len ?? row.avg_rally_length;
-    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td><td>${fmtCell(row.win_rate, 2)}</td><td>${fmtCell(epLen, 1)}</td><td>${fmtCell(row.avg_return_rate, 2)}</td>`;
+    const winCell = showWin ? `<td class="maze-hide">${fmtCell(row.win_rate, 2)}</td>` : '';
+    const returnCell = showWin ? `<td class="maze-hide">${fmtCell(row.avg_return_rate, 2)}</td>` : '';
+    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}`;
     table.appendChild(tr);
   }
   const byCycle = new Map();
@@ -1019,10 +1112,12 @@ async function refreshCharts() {
     } else {
       drawEmpty(document.getElementById('chartReward'), 'No reward data');
     }
-    if (winStats) {
-      drawRangeChart(document.getElementById('chartWin'), winStats, '#f5a623', 'Win Rate (single cycle)', 0, 1);
-    } else {
-      drawEmpty(document.getElementById('chartWin'), 'No win data');
+    if (showWin) {
+      if (winStats) {
+        drawRangeChart(document.getElementById('chartWin'), winStats, '#f5a623', 'Win Rate (single cycle)', 0, 1);
+      } else {
+        drawEmpty(document.getElementById('chartWin'), 'No win data');
+      }
     }
     if (deltaStats) {
       drawRangeChart(document.getElementById('chartDelta'), deltaStats, '#7cc6ff', 'Delta Reward (single cycle)');
@@ -1068,9 +1163,11 @@ async function refreshCharts() {
   drawLineChart(document.getElementById('chartReward'), cycles, [
     { label: compareMode, color: '#14f195', values: rewards },
   ], 'Avg Reward');
-  drawLineChart(document.getElementById('chartWin'), cycles, [
-    { label: compareMode, color: '#f5a623', values: wins },
-  ], 'Win Rate');
+  if (showWin) {
+    drawLineChart(document.getElementById('chartWin'), cycles, [
+      { label: compareMode, color: '#f5a623', values: wins },
+    ], 'Win Rate');
+  }
   drawLineChart(document.getElementById('chartDelta'), cycles, [
     { label: compareMode, color: '#7cc6ff', values: deltas },
   ], 'Delta Reward');
@@ -1084,7 +1181,9 @@ async function refreshCharts() {
     updateVideoInsights(series);
   } catch (err) {
     drawEmpty(document.getElementById('chartReward'), 'Training charts failed');
-    drawEmpty(document.getElementById('chartWin'), 'Training charts failed');
+    if (showWin) {
+      drawEmpty(document.getElementById('chartWin'), 'Training charts failed');
+    }
     drawEmpty(document.getElementById('chartDelta'), 'Training charts failed');
     drawEmpty(document.getElementById('chartRally'), 'Training charts failed');
     document.getElementById('dataLine').textContent = `Data: chart error (${err})`;
@@ -1239,12 +1338,12 @@ function updateKpis(series) {
   const bestReward = Math.max(...rewardVals);
   const bestRewardCi = (latest.find(r => r.avg_reward === bestReward)?.avg_reward_ci) ?? null;
   const avgReward = avgOfRows(latest, 'avg_reward');
-  const avgWin = avgOfRows(latest, 'win_rate');
-  const avgReturn = avgOfRows(latest, 'avg_return_rate');
-  const avgReturnCi = avgOfRows(latest, 'avg_return_rate_ci');
+  const avgWin = isMaze ? null : avgOfRows(latest, 'win_rate');
+  const avgReturn = isMaze ? null : avgOfRows(latest, 'avg_return_rate');
+  const avgReturnCi = isMaze ? null : avgOfRows(latest, 'avg_return_rate_ci');
   const avgEpLen = avgOfRows(latest, 'avg_ep_len');
   const prevAvgReward = avgOfRows(prev, 'avg_reward') ?? avgReward;
-  const prevAvgWin = avgOfRows(prev, 'win_rate') ?? avgWin;
+  const prevAvgWin = isMaze ? null : (avgOfRows(prev, 'win_rate') ?? avgWin);
   const prevAvgLen = avgOfRows(prev, 'avg_ep_len') ?? avgEpLen;
   const deltaReward = (avgReward ?? 0) - (prevAvgReward ?? 0);
   const deltaWin = (avgWin ?? 0) - (prevAvgWin ?? 0);
@@ -1254,9 +1353,9 @@ function updateKpis(series) {
   document.getElementById('kpiAvgReward').textContent = avgReward !== null ? avgReward.toFixed(2) : '--';
   document.getElementById('kpiAvgRewardDelta').textContent = `Delta ${deltaReward.toFixed(2)} vs last cycle`;
   document.getElementById('kpiWinRate').textContent = avgWin !== null ? avgWin.toFixed(2) : '--';
-  document.getElementById('kpiWinRateDelta').textContent = `Delta ${deltaWin.toFixed(2)} vs last cycle`;
+  document.getElementById('kpiWinRateDelta').textContent = isMaze ? 'Maze mode' : `Delta ${deltaWin.toFixed(2)} vs last cycle`;
   document.getElementById('kpiReturnRate').textContent = avgReturn !== null ? avgReturn.toFixed(2) : '--';
-  document.getElementById('kpiReturnRateCi').textContent = avgReturnCi !== null ? `CI +/-${avgReturnCi.toFixed(2)}` : 'CI --';
+  document.getElementById('kpiReturnRateCi').textContent = isMaze ? 'Maze mode' : (avgReturnCi !== null ? `CI +/-${avgReturnCi.toFixed(2)}` : 'CI --');
   document.getElementById('kpiRally').textContent = avgEpLen !== null ? avgEpLen.toFixed(1) : '--';
   document.getElementById('kpiRallyDelta').textContent = `Delta ${deltaLen.toFixed(1)} vs last cycle`;
 }
@@ -1324,7 +1423,9 @@ function drawCorrelations(series) {
     .map(r => [r.avg_ep_len ?? r.avg_rally_length, r.avg_reward])
     .filter(p => p[0] !== null && p[0] !== undefined && p[1] !== null && p[1] !== undefined);
   drawScatter(document.getElementById('scatterRally'), lenPoints, '#ff5f7a', 'Episode Length', 'Reward');
-  drawScatter(document.getElementById('scatterReturn'), series.map(r => [r.avg_return_rate, r.avg_reward]), '#2aa4ff', 'Return', 'Reward');
+  if (!isMaze) {
+    drawScatter(document.getElementById('scatterReturn'), series.map(r => [r.avg_return_rate, r.avg_reward]), '#2aa4ff', 'Return', 'Reward');
+  }
 }
 
 function drawScatter(canvas, points, color, xLabel, yLabel) {
@@ -1525,10 +1626,12 @@ function renderCohortTable() {
   const rewardB = seriesB.length ? avgOf(seriesB, 'avg_reward') : avgRewardFromReport(runB);
   const rows = [
     ['Avg Reward', rewardA, rewardB],
-    ['Win Rate', avgOf(seriesA, 'win_rate'), avgOf(seriesB, 'win_rate')],
-    ['Return Rate', avgOf(seriesA, 'avg_return_rate'), avgOf(seriesB, 'avg_return_rate')],
     ['Episode Length', avgOf(seriesA, 'avg_ep_len'), avgOf(seriesB, 'avg_ep_len')],
   ];
+  if (!isMaze) {
+    rows.splice(1, 0, ['Win Rate', avgOf(seriesA, 'win_rate'), avgOf(seriesB, 'win_rate')]);
+    rows.splice(2, 0, ['Return Rate', avgOf(seriesA, 'avg_return_rate'), avgOf(seriesB, 'avg_return_rate')]);
+  }
   const tbody = document.getElementById('cohortTable');
   tbody.innerHTML = '';
   rows.forEach(([label, a, b]) => {
@@ -1591,16 +1694,18 @@ function updateQualityGates(series) {
   const winGate = parseFloat(document.getElementById('gateWin').value || '0');
   const rewardOk = latest.avg_reward >= rewardGate;
   const winOk = latest.win_rate >= winGate;
-  const status = `Reward ${latest.avg_reward.toFixed(2)} (${rewardOk ? 'pass' : 'fail'}) | Win ${latest.win_rate.toFixed(2)} (${winOk ? 'pass' : 'fail'})`;
+  const status = isMaze
+    ? `Reward ${latest.avg_reward.toFixed(2)} (${rewardOk ? 'pass' : 'fail'})`
+    : `Reward ${latest.avg_reward.toFixed(2)} (${rewardOk ? 'pass' : 'fail'}) | Win ${latest.win_rate.toFixed(2)} (${winOk ? 'pass' : 'fail'})`;
   const node = document.getElementById('gateStatus');
   node.textContent = status;
-  node.className = rewardOk && winOk ? 'tiny ok' : 'tiny alert';
+  node.className = rewardOk && (isMaze || winOk) ? 'tiny ok' : 'tiny alert';
 }
 
 function updateVideoInsights(series) {
   const target = document.getElementById('videoInsights');
   if (!series.length) {
-    target.textContent = 'No rally insights yet.';
+    target.textContent = 'No episode insights yet.';
     return;
   }
   const withLen = [...series].map(row => ({
@@ -1666,14 +1771,7 @@ document.getElementById('snapshotBtn').addEventListener('click', () => {
 });
 
 function initSnapshotOptions() {
-  const ids = ['chartReward', 'chartWin', 'chartDelta', 'chartRally', 'histReward', 'histRally', 'scatterRally', 'scatterReturn', 'heatmap'];
-  const select = document.getElementById('snapshotSelect');
-  ids.forEach(id => {
-    const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = id;
-    select.appendChild(opt);
-  });
+  updateSnapshotOptions();
 }
 
 initSnapshotOptions();
