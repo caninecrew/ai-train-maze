@@ -308,6 +308,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                     "novel_steps": _safe_float(row.get("novel_steps")),
                                     "unique_cells": _safe_float(row.get("unique_cells")),
                                     "final_dist": _safe_float(row.get("final_dist")),
+                                    "wall_hit_rate": _safe_float(row.get("wall_hit_rate")),
+                                    "idle_rate": _safe_float(row.get("idle_rate")),
+                                    "backtrack_rate": _safe_float(row.get("backtrack_rate")),
+                                    "novel_rate": _safe_float(row.get("novel_rate")),
                                     "timestamp": row.get("timestamp", ""),
                                     "run_id": row.get("run_timestamp", ""),
                                     "game": row.get("game", ""),
@@ -801,6 +805,8 @@ def _dashboard_html() -> str:
                 <th>Wall Hits</th>
                 <th>Backtracks</th>
                 <th>Unique Cells</th>
+                <th>Wall Hit %</th>
+                <th>Backtrack %</th>
               </tr>
             </thead>
             <tbody id="metricsTable"></tbody>
@@ -1110,7 +1116,9 @@ async function refreshCharts() {
     const wallCell = `<td>${fmtCell(row.wall_hits, 1)}</td>`;
     const backtrackCell = `<td>${fmtCell(row.backtracks, 1)}</td>`;
     const uniqueCell = `<td>${fmtCell(row.unique_cells, 1)}</td>`;
-    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}${goalCell}${progressCell}${wallCell}${backtrackCell}${uniqueCell}`;
+    const wallRateCell = `<td>${fmtCell(row.wall_hit_rate, 2)}</td>`;
+    const backtrackRateCell = `<td>${fmtCell(row.backtrack_rate, 2)}</td>`;
+    tr.innerHTML = `<td>${row.cycle}</td><td>${row.model_id}</td><td>${fmtCell(row.avg_reward, 2)}</td><td>${fmtCell(row.delta_reward, 2)}</td>${winCell}<td>${fmtCell(epLen, 1)}</td>${returnCell}${goalCell}${progressCell}${wallCell}${backtrackCell}${uniqueCell}${wallRateCell}${backtrackRateCell}`;
     table.appendChild(tr);
   }
   const byCycle = new Map();
