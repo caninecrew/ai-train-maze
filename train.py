@@ -823,6 +823,11 @@ def main():
                             shutil.copy2(initial_resume, target_latest)
                         except OSError:
                             pass
+            worker_timeout_env = os.getenv("TRAIN_WORKER_TIMEOUT", "").strip()
+            try:
+                worker_timeout = int(worker_timeout_env) if worker_timeout_env else 1800
+            except ValueError:
+                worker_timeout = 1800
             with concurrent.futures.ProcessPoolExecutor(max_workers=cfg.iterations_per_set) as executor:
                 for idx, model_id in enumerate(model_ids):
                     derived_seed = base_seed + idx + cycle
@@ -836,7 +841,12 @@ def main():
                     futures.append(future)
                     seed_by_future[future] = derived_seed
 
-                for future in concurrent.futures.as_completed(futures):
+                done, not_done = concurrent.futures.wait(futures, timeout=worker_timeout)
+                if not_done:
+                    print(f"[watchdog] {len(not_done)} worker(s) timed out after {worker_timeout}s; canceling.")
+                    for future in not_done:
+                        future.cancel()
+                for future in done:
                     try:
                         model_id, metrics, stamp, latest_path, stamped_path = future.result()
                     except Exception as exc:
