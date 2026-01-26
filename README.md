@@ -22,7 +22,7 @@ Best practices and naming convention:
 - Maze IDs use `maze_###` (e.g., `maze_001`) and stay consistent across assets/data/outputs.
 - Optional per-maze config can live at `assets/mazes/maze_###.json` (rows/cols, thresholds, wall_ratio).
 - GitHub Actions: run `maze-convert-and-train` manually to convert the latest maze and train; adjust `max_cycles` and `train_args` as needed.
-- Local training: use `scripts/mazes/train_local.ps1` (Windows) or `scripts/mazes/train_local.sh` (macOS/Linux). Set `MAZE_ID` and `MAZE_MAX_STEPS` to control the maze run.
+- Local training: use `scripts/mazes/train_local.ps1` (Windows) or `scripts/mazes/train_local.sh` (macOS/Linux). They auto-resume from the best checkpoint in `logs/metrics.csv` when present.
 
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.

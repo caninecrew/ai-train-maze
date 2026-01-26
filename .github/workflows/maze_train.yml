@@ -122,6 +122,7 @@ jobs:
           MAZE_MAX_STEPS: ${{ inputs.max_steps }}
         run: |
           mkdir -p videos models logs
+          best_resume="$(python3 scripts/mazes/find_best_checkpoint.py 2>/dev/null || true)"
           max_cycles="${{ inputs.max_cycles }}"
           if [ -z "$max_cycles" ]; then
             max_cycles="1"
@@ -138,7 +139,12 @@ jobs:
           if [ -z "$patience" ]; then
             patience="9999"
           fi
-          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" --early-stop-patience "$patience" ${{ inputs.train_args }}
+          resume_arg=""
+          if [ -n "$best_resume" ]; then
+            resume_arg="--resume-from $best_resume"
+            echo "Using best checkpoint: $best_resume"
+          fi
+          python train.py --game "$game" --max-cycles "$max_cycles" --iterations-per-set "$iters" --early-stop-patience "$patience" $resume_arg ${{ inputs.train_args }}
 
       - name: Commit training outputs
         if: github.event_name != 'pull_request'
