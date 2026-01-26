@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import gymnasium as gym
 import numpy as np
@@ -239,6 +239,69 @@ class MazeEnv(gym.Env):
     def get_agent_cell(self) -> tuple[int, int]:
         return self._agent
 
+    def get_eval_stats(self) -> Dict[str, float]:
+        return {
+            "goal_reached": float(self._agent == self._goal),
+            "best_dist": float(self._best_dist),
+            "best_progress": float(self._start_dist - self._best_dist),
+            "steps": float(self._step_count),
+        }
+
+
+def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dict[str, float]:
+    env = _make_env(render_mode=None, seed=None, variant=None)
+    rewards: List[float] = []
+    lengths: List[int] = []
+    goals: List[float] = []
+    best_dists: List[float] = []
+    best_progress: List[float] = []
+    steps: List[float] = []
+    for _ in range(episodes):
+        obs, _ = env.reset()
+        done = False
+        ep_reward = 0.0
+        ep_steps = 0
+        while not done:
+            action, _ = model.predict(obs, deterministic=deterministic)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            ep_reward += float(reward)
+            ep_steps += 1
+            done = terminated or truncated
+        rewards.append(ep_reward)
+        lengths.append(ep_steps)
+        stats = env.get_eval_stats() if hasattr(env, "get_eval_stats") else {}
+        goals.append(float(stats.get("goal_reached", 0.0)))
+        best_dists.append(float(stats.get("best_dist", 0.0)))
+        best_progress.append(float(stats.get("best_progress", 0.0)))
+        steps.append(float(stats.get("steps", ep_steps)))
+    env.close()
+
+    def _ci(values: List[float]) -> float:
+        if len(values) < 2:
+            return 0.0
+        std = float(np.std(values, ddof=1))
+        return 1.96 * std / np.sqrt(len(values))
+
+    avg_reward = float(np.mean(rewards)) if rewards else 0.0
+    avg_len = float(np.mean(lengths)) if lengths else 0.0
+    return {
+        "avg_reward": avg_reward,
+        "avg_reward_ci": _ci(rewards),
+        "avg_ep_len": avg_len,
+        "avg_ep_len_ci": _ci(lengths),
+        "goal_reached_rate": float(np.mean(goals)) if goals else 0.0,
+        "best_dist": float(np.mean(best_dists)) if best_dists else 0.0,
+        "best_progress": float(np.mean(best_progress)) if best_progress else 0.0,
+        "avg_steps": float(np.mean(steps)) if steps else 0.0,
+    }
+    def get_eval_stats(self) -> Dict[str, float]:
+        return {
+            "goal_reached": float(self._agent == self._goal),
+            "best_dist": float(self._best_dist),
+            "best_progress": float(self._start_dist - self._best_dist),
+            "steps": float(self._step_count),
+        }
+
 
 def _make_env(render_mode: Optional[str], seed: Optional[int], variant: Optional[int]) -> gym.Env:
     env = MazeEnv(render_mode=render_mode, seed=seed, variant=variant)
@@ -253,7 +316,7 @@ def maze_adapter() -> GameAdapter:
         description="Grid-based maze environment backed by a maze PNG and cached grid.",
         model_prefix="ppo_maze",
         make_env_fn=_make_env,
-        extra_metrics=[],
-        eval_fn=None,
+        extra_metrics=["goal_reached_rate", "best_dist", "best_progress", "avg_steps"],
+        eval_fn=_evaluate_maze,
         heatmap_fn=None,
     )
