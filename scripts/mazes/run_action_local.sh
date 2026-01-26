@@ -20,6 +20,7 @@ TRAIN_TIMESTEPS="${14:-40000}"
 N_ENVS="${15:-8}"
 EVAL_EPISODES="${16:-3}"
 DEVICE="${17:-cpu}"
+NO_RESUME="${18:-false}"
 
 export SDL_VIDEODRIVER=dummy
 export SDL_AUDIODRIVER=dummy
@@ -67,14 +68,16 @@ python3 scripts/mazes/convert_png_to_grid.py \
   --out "$out_dir/$maze_id" \
   "${cfg_arg[@]}"
 
-best_resume=""
-if [ -f logs/metrics.csv ]; then
-  best_resume="$(python3 scripts/mazes/find_best_checkpoint.py 2>/dev/null || true)"
-fi
 resume_arg=()
-if [ -n "$best_resume" ]; then
-  resume_arg=(--resume-from "$best_resume")
-  echo "Using best checkpoint: $best_resume"
+if [ "${NO_RESUME,,}" != "true" ]; then
+  best_resume=""
+  if [ -f logs/metrics.csv ]; then
+    best_resume="$(python3 scripts/mazes/find_best_checkpoint.py 2>/dev/null || true)"
+  fi
+  if [ -n "$best_resume" ]; then
+    resume_arg=(--resume-from "$best_resume")
+    echo "Using best checkpoint: $best_resume"
+  fi
 fi
 
 if [ -z "$TRAIN_ARGS" ]; then
