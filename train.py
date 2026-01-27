@@ -1033,7 +1033,7 @@ def main():
         if maze_res:
             cfg.video_resolution = maze_res
         auto_goal = _auto_goal_enabled()
-        if auto_goal and not os.getenv("MAZE_TRAIN_GOAL", "").strip():
+        if auto_goal:
             auto_settings = _auto_training_goal_from_metrics(cfg)
             if auto_settings:
                 os.environ["MAZE_TRAIN_GOAL"] = auto_settings.get("train_goal", "")
