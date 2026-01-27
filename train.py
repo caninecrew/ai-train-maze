@@ -777,6 +777,16 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
                     best_dist = 0.0
                 train_goal = row.get("train_goal") or ""
                 train_goal_fraction = row.get("train_goal_fraction") or ""
+                try:
+                    final_row = float(row.get("final_row")) if row.get("final_row") not in {None, ""} else None
+                    final_col = float(row.get("final_col")) if row.get("final_col") not in {None, ""} else None
+                except Exception:
+                    final_row = None
+                    final_col = None
+                try:
+                    final_dist = float(row.get("final_dist") or 0.0)
+                except Exception:
+                    final_dist = 0.0
                 latest_by_run.setdefault(
                     run_id,
                     {
@@ -784,10 +794,18 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
                         "best_dist": best_dist,
                         "train_goal": train_goal,
                         "train_goal_fraction": train_goal_fraction,
+                        "final_dist": final_dist,
+                        "final_row": final_row,
+                        "final_col": final_col,
                     },
                 )
                 latest_by_run[run_id]["goal_rate"] = max(latest_by_run[run_id]["goal_rate"], goal_rate)
                 latest_by_run[run_id]["best_dist"] = min(latest_by_run[run_id]["best_dist"], best_dist)
+                if final_row is not None and final_col is not None:
+                    if final_dist < float(latest_by_run[run_id].get("final_dist", float("inf"))):
+                        latest_by_run[run_id]["final_dist"] = final_dist
+                        latest_by_run[run_id]["final_row"] = final_row
+                        latest_by_run[run_id]["final_col"] = final_col
                 if train_goal:
                     latest_by_run[run_id]["train_goal"] = train_goal
                 if train_goal_fraction:
@@ -805,6 +823,13 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     except ValueError:
         fraction = 0.25
     train_goal = str(stats.get("train_goal") or "")
+    final_row = stats.get("final_row")
+    final_col = stats.get("final_col")
+    if final_row is not None and final_col is not None:
+        try:
+            train_goal = f"{int(final_row)},{int(final_col)}"
+        except Exception:
+            pass
     goal_rate = stats.get("goal_rate", 0.0)
     best_dist = stats.get("best_dist", 1.0)
     solved = goal_rate >= 0.9 and best_dist <= 1.0
