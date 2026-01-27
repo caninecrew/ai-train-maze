@@ -91,12 +91,16 @@ def record_video_segment(
     overlay_text: str = "",
     resolution: Tuple[int, int] = (320, 192),
     variant: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> List[np.ndarray]:
     """
     Roll out a short episode with the trained model and return frames.
     """
-    env = game.make_env(render_mode="rgb_array", variant=variant)
-    obs, _ = env.reset()
+    env = game.make_env(render_mode="rgb_array", seed=seed, variant=variant)
+    if seed is None:
+        obs, _ = env.reset()
+    else:
+        obs, _ = env.reset(seed=seed)
     frames: List[np.ndarray] = []
     target_size = resolution  # divisible by 16 to keep codecs happy
 
@@ -150,12 +154,16 @@ def record_video_segment_with_goal(
     overlay_text: str = "",
     resolution: Tuple[int, int] = (320, 192),
     variant: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> Tuple[List[np.ndarray], bool]:
     """
     Roll out a short episode and report whether the goal was reached.
     """
-    env = game.make_env(render_mode="rgb_array", variant=variant)
-    obs, _ = env.reset()
+    env = game.make_env(render_mode="rgb_array", seed=seed, variant=variant)
+    if seed is None:
+        obs, _ = env.reset()
+    else:
+        obs, _ = env.reset(seed=seed)
     frames: List[np.ndarray] = []
     target_size = resolution
     goal_reached = False
@@ -987,6 +995,7 @@ def _train_single(
     model.save(latest_path)
     print(f"[{model_id}] Updated latest model: {latest_path}")
 
+    os.environ["MAZE_EVAL_SEED_BASE"] = str(seed)
     metrics = evaluate_model(game, model, cfg.eval_episodes, deterministic=cfg.eval_deterministic or cfg.deterministic)
     print(f"[{model_id}] Avg reward over {cfg.eval_episodes} eval episodes: {metrics['avg_reward']:.3f}")
 
@@ -1300,15 +1309,22 @@ def main():
                 try:
                     model = PPO.load(model_path, device="cpu")
                     variant = None
+                    seed_for_video = None
                     if label in model_ids:
-                        variant = model_ids.index(label)
+                        idx = model_ids.index(label)
+                        variant = idx
+                        seed_for_video = base_seed + idx + cycle
+                    overlay_text = overlay
+                    if seed_for_video is not None:
+                        overlay_text = f"{overlay} | seed {seed_for_video}"
                     segment = record_video_segment(
                         game,
                         model,
                         steps=cfg.video_steps,
-                        overlay_text=overlay,
+                        overlay_text=overlay_text,
                         resolution=_parse_resolution(cfg.video_resolution),
                         variant=variant,
+                        seed=seed_for_video,
                     )
                     if segment:
                         combined_frames_per_model.append(segment)

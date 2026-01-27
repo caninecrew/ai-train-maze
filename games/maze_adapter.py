@@ -367,6 +367,11 @@ class MazeEnv(gym.Env):
 
 
 def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dict[str, float]:
+    seed_env = os.getenv("MAZE_EVAL_SEED_BASE", "").strip()
+    try:
+        seed_base = int(seed_env) if seed_env else None
+    except ValueError:
+        seed_base = None
     env = _make_env(render_mode=None, seed=None, variant=None)
     rewards: List[float] = []
     lengths: List[int] = []
@@ -387,7 +392,10 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
     backtrack_rate: List[float] = []
     novel_rate: List[float] = []
     for _ in range(episodes):
-        obs, _ = env.reset()
+        if seed_base is None:
+            obs, _ = env.reset()
+        else:
+            obs, _ = env.reset(seed=seed_base + _)
         done = False
         ep_reward = 0.0
         ep_steps = 0
