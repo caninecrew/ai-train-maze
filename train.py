@@ -1256,8 +1256,6 @@ def main():
                     score = -float(best_dist) + (goal_rate * 1000.0)
                 scored_candidates.append((model_id, score, goal_rate))
             best_id = max(scored_candidates, key=lambda t: t[1])[0] if scored_candidates else None
-            solvers = [mid for mid, _, _ in scored_candidates]
-
             capture_models: List[Tuple[str, str, str]] = []
             for model_id, metrics, model_path in metrics_list:
                 capture_models.append(
@@ -1267,20 +1265,6 @@ def main():
                         f"{model_id} | r {metrics.get('avg_reward', 0.0):.2f}",
                     )
                 )
-            if best_id:
-                best_path = next((p for mid, _, p in metrics_list if mid == best_id), "")
-                if best_path:
-                    capture_models.append((f"{best_id}_best", best_path, f"{best_id} | BEST"))
-            for solver_id in solvers:
-                solver_path = next((p for mid, _, p in metrics_list if mid == solver_id), "")
-                if solver_path:
-                    capture_models.append((f"{solver_id}_solved", solver_path, f"{solver_id} | SOLVED"))
-
-            solved_retries_env = os.getenv("MAZE_SOLVED_VIDEO_RETRIES", "").strip()
-            try:
-                solved_retries = max(1, int(solved_retries_env)) if solved_retries_env else 3
-            except ValueError:
-                solved_retries = 3
 
             for label, model_path, overlay in capture_models:
                 try:
@@ -1288,32 +1272,14 @@ def main():
                     variant = None
                     if label in model_ids:
                         variant = model_ids.index(label)
-                    if label.endswith("_solved"):
-                        segment = []
-                        goal_hit = False
-                        for _ in range(solved_retries):
-                            segment, goal_hit = record_video_segment_with_goal(
-                                game,
-                                model,
-                                steps=cfg.video_steps,
-                                overlay_text=overlay,
-                                resolution=_parse_resolution(cfg.video_resolution),
-                                variant=variant,
-                            )
-                            if goal_hit:
-                                break
-                        if not goal_hit:
-                            print(f"[{label}] Skipping SOLVED tag (goal not reached in {solved_retries} tries).")
-                            continue
-                    else:
-                        segment = record_video_segment(
-                            game,
-                            model,
-                            steps=cfg.video_steps,
-                            overlay_text=overlay,
-                            resolution=_parse_resolution(cfg.video_resolution),
-                            variant=variant,
-                        )
+                    segment = record_video_segment(
+                        game,
+                        model,
+                        steps=cfg.video_steps,
+                        overlay_text=overlay,
+                        resolution=_parse_resolution(cfg.video_resolution),
+                        variant=variant,
+                    )
                     if segment:
                         combined_frames_per_model.append(segment)
                         segments_by_model[label] = segment

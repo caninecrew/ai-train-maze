@@ -7,6 +7,6 @@ defaults:
   n_steps: 512
   batch_size: 1024
   n_epochs: 3
-  video_steps: 0
-  max_video_seconds: 0
+  video_steps: 600
+  max_video_seconds: 30
   target_fps: 30
