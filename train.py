@@ -512,6 +512,16 @@ def _metrics_fieldnames_for_game(game_name: str, extra_metrics: List[str]) -> Li
         "delta_reward",
         "train_goal",
         "train_goal_fraction",
+        "train_timesteps",
+        "iterations_per_set",
+        "eval_episodes",
+        "n_envs",
+        "n_steps",
+        "batch_size",
+        "n_epochs",
+        "video_steps",
+        "max_video_seconds",
+        "target_fps",
         "cycle_start",
         "cycle_duration_s",
         "eta_end",
@@ -1441,6 +1451,16 @@ def main():
                         "delta_reward",
                         "train_goal",
                         "train_goal_fraction",
+                        "train_timesteps",
+                        "iterations_per_set",
+                        "eval_episodes",
+                        "n_envs",
+                        "n_steps",
+                        "batch_size",
+                        "n_epochs",
+                        "video_steps",
+                        "max_video_seconds",
+                        "target_fps",
                         "cycle_start",
                         "cycle_duration_s",
                         "eta_end",
@@ -1462,6 +1482,16 @@ def main():
                     row["delta_reward"] = delta_reward if delta_reward is not None else ""
                     row["train_goal"] = train_goal
                     row["train_goal_fraction"] = train_goal_fraction
+                    row["train_timesteps"] = cfg.train_timesteps
+                    row["iterations_per_set"] = cfg.iterations_per_set
+                    row["eval_episodes"] = cfg.eval_episodes
+                    row["n_envs"] = cfg.n_envs
+                    row["n_steps"] = cfg.n_steps
+                    row["batch_size"] = cfg.batch_size
+                    row["n_epochs"] = cfg.n_epochs
+                    row["video_steps"] = cfg.video_steps
+                    row["max_video_seconds"] = cfg.max_video_seconds
+                    row["target_fps"] = cfg.target_fps
                     row["cycle_start"] = cycle_started_at.strftime("%Y-%m-%d %H:%M:%S")
                     row["cycle_duration_s"] = f"{cycle_seconds:.2f}"
                     row["eta_end"] = eta_at.strftime("%Y-%m-%d %H:%M:%S")
