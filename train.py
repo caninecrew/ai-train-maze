@@ -504,11 +504,16 @@ def _metrics_fieldnames_for_game(game_name: str, extra_metrics: List[str]) -> Li
     return [
         "cycle",
         "model_id",
+        "model_index",
         "avg_reward",
         "avg_reward_ci",
         "avg_ep_len",
         "avg_ep_len_ci",
         *extra_metrics,
+        "rank_avg_reward",
+        "rank_best_dist",
+        "rank_goal_rate",
+        "rank_best_progress",
         "delta_reward",
         "train_goal",
         "train_goal_fraction",
@@ -1441,13 +1446,42 @@ def main():
             eta_at = datetime.now() + timedelta(seconds=eta_seconds)
 
             metrics_csv_exists = metrics_csv_path.exists()
+            def _model_index(mid: str) -> int:
+                try:
+                    return int(mid.rsplit("_", 1)[-1])
+                except (ValueError, AttributeError):
+                    return -1
+
+            def _rank_by(key: str, reverse: bool = False) -> Dict[str, int]:
+                scored = []
+                for mid, metrics, _ in metrics_list:
+                    value = metrics.get(key)
+                    if value is None or value == "":
+                        continue
+                    scored.append((mid, value))
+                scored.sort(key=lambda item: item[1], reverse=reverse)
+                ranks: Dict[str, int] = {}
+                for idx, (mid, _) in enumerate(scored, start=1):
+                    ranks[mid] = idx
+                return ranks
+
+            rank_avg_reward = _rank_by("avg_reward", reverse=True)
+            rank_best_dist = _rank_by("best_dist", reverse=False)
+            rank_goal_rate = _rank_by("goal_reached_rate", reverse=True)
+            rank_best_progress = _rank_by("best_progress", reverse=True)
+
             with metrics_csv_path.open("a", newline="", encoding="utf-8") as csvfile:
                 writer = csv.DictWriter(
                     csvfile,
                     fieldnames=[
                         "cycle",
                         "model_id",
+                        "model_index",
                         *metric_fields,
+                        "rank_avg_reward",
+                        "rank_best_dist",
+                        "rank_goal_rate",
+                        "rank_best_progress",
                         "delta_reward",
                         "train_goal",
                         "train_goal_fraction",
@@ -1477,8 +1511,13 @@ def main():
                         delta_reward = metrics.get("avg_reward", 0.0) - last_avg_by_model[model_id]
                     last_avg_by_model[model_id] = metrics.get("avg_reward", 0.0)
                     row = {"cycle": cycle, "model_id": model_id}
+                    row["model_index"] = _model_index(model_id)
                     for field in metric_fields:
                         row[field] = metrics.get(field, "")
+                    row["rank_avg_reward"] = rank_avg_reward.get(model_id, "")
+                    row["rank_best_dist"] = rank_best_dist.get(model_id, "")
+                    row["rank_goal_rate"] = rank_goal_rate.get(model_id, "")
+                    row["rank_best_progress"] = rank_best_progress.get(model_id, "")
                     row["delta_reward"] = delta_reward if delta_reward is not None else ""
                     row["train_goal"] = train_goal
                     row["train_goal_fraction"] = train_goal_fraction
