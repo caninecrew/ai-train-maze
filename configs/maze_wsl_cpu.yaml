@@ -5,7 +5,7 @@ defaults:
   device: cpu
   iterations_per_set: 3
   train_timesteps: 150000
-  eval_episodes: 1
+  eval_episodes: 2
   n_envs: 8
   n_steps: 512
   batch_size: 1024

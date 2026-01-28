@@ -892,7 +892,7 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     solved = goal_rate >= 0.9 and best_dist <= 1.0
     streak_env = os.getenv("MAZE_AUTO_GOAL_STREAK", "").strip()
     try:
-        required_streak = max(1, int(streak_env)) if streak_env else 2
+        required_streak = max(1, int(streak_env)) if streak_env else 3
     except ValueError:
         required_streak = 2
     streak = 0
