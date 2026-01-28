@@ -3,10 +3,13 @@ name: maze
 defaults:
   game: maze
   device: cpu
+  iterations_per_set: 3
+  train_timesteps: 150000
+  eval_episodes: 1
   n_envs: 8
   n_steps: 512
   batch_size: 1024
   n_epochs: 3
-  video_steps: 600
-  max_video_seconds: 30
+  video_steps: 300
+  max_video_seconds: 10
   target_fps: 30
