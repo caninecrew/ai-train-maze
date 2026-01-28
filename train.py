@@ -1230,6 +1230,7 @@ def main():
 
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
+        seed_by_model: Dict[str, int] = {}
         try:
             if best_checkpoint_path and os.path.exists(best_checkpoint_path):
                 for model_id in model_ids:
@@ -1274,12 +1275,13 @@ def main():
                     if best_dist is None:
                         score = float("-inf")
                     else:
-                        score = -float(best_dist) + (goal_rate * 1000.0)
+                        score = -float(best_dist)
                     scores.append((model_id, score))
                     metrics_list.append((model_id, metrics, latest_path))
                     if stamped_path:
                         metrics_list[-1] = (model_id, metrics, stamped_path)
                     timestamp = stamp  # use last reported for video naming
+                    seed_by_model[model_id] = derived_seed
                     print(f"[{model_id}] Training done; seed={derived_seed}")
             else:
                 executor = concurrent.futures.ProcessPoolExecutor(
@@ -1317,13 +1319,14 @@ def main():
                             if best_dist is None:
                                 score = float("-inf")
                             else:
-                                score = -float(best_dist) + (goal_rate * 1000.0)
+                                score = -float(best_dist)
                             scores.append((model_id, score))
                             metrics_list.append((model_id, metrics, latest_path))
                             if stamped_path:
                                 metrics_list[-1] = (model_id, metrics, stamped_path)
                             timestamp = stamp  # use last reported for video naming
                             seed_used = seed_by_future.get(future, base_seed)
+                            seed_by_model[model_id] = seed_used
                             print(f"[{model_id}] Training done; seed={seed_used}")
                     except concurrent.futures.TimeoutError:
                         print(f"[watchdog] Worker(s) timed out after {worker_timeout}s; canceling remaining.")
@@ -1349,16 +1352,23 @@ def main():
                 if best_dist is None:
                     score = float("-inf")
                 else:
-                    score = -float(best_dist) + (goal_rate * 1000.0)
+                    score = -float(best_dist)
                 scored_candidates.append((model_id, score, goal_rate))
             best_id = max(scored_candidates, key=lambda t: t[1])[0] if scored_candidates else None
             capture_models: List[Tuple[str, str, str]] = []
             for model_id, metrics, model_path in metrics_list:
+                best_dist = metrics.get("best_dist")
+                dist_text = "--"
+                if best_dist is not None:
+                    try:
+                        dist_text = f"{float(best_dist):.1f}"
+                    except (TypeError, ValueError):
+                        dist_text = str(best_dist)
                 capture_models.append(
                     (
                         model_id,
                         model_path,
-                        f"{model_id} | r {metrics.get('avg_reward', 0.0):.2f}",
+                        f"{model_id} | r {metrics.get('avg_reward', 0.0):.2f} | dist {dist_text}",
                     )
                 )
 
@@ -1366,11 +1376,12 @@ def main():
                 try:
                     model = PPO.load(model_path, device="cpu")
                     variant = None
-                    seed_for_video = None
+                    seed_for_video = seed_by_model.get(label)
                     if label in model_ids:
                         idx = model_ids.index(label)
                         variant = idx
-                        seed_for_video = base_seed + idx + cycle
+                        if seed_for_video is None:
+                            seed_for_video = base_seed + idx + cycle
                     overlay_text = overlay
                     if seed_for_video is not None:
                         overlay_text = f"{overlay} | seed {seed_for_video}"
