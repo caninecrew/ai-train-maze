@@ -756,6 +756,7 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     if not metrics_path.exists():
         return None
     latest_by_run: Dict[str, Dict[str, Any]] = {}
+    per_run_cycles: Dict[str, Dict[int, Dict[str, Any]]] = {}
     try:
         with metrics_path.open("r", encoding="utf-8") as fh:
             first_line = fh.readline()
@@ -810,6 +811,35 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
                         "final_col": final_col,
                     },
                 )
+                if run_id not in per_run_cycles:
+                    per_run_cycles[run_id] = {}
+                try:
+                    cycle_num = int(float(row.get("cycle") or 0))
+                except Exception:
+                    cycle_num = 0
+                cycle_entry = per_run_cycles[run_id].setdefault(
+                    cycle_num,
+                    {
+                        "goal_rate": 0.0,
+                        "best_dist": best_dist,
+                        "final_dist": final_dist,
+                        "final_row": final_row,
+                        "final_col": final_col,
+                        "timestamp": row.get("timestamp") or "",
+                    },
+                )
+                # keep best stats per cycle (closest final_dist, smallest best_dist)
+                if final_dist < float(cycle_entry.get("final_dist", float("inf"))):
+                    cycle_entry["final_dist"] = final_dist
+                    cycle_entry["final_row"] = final_row
+                    cycle_entry["final_col"] = final_col
+                if best_dist < float(cycle_entry.get("best_dist", float("inf"))):
+                    cycle_entry["best_dist"] = best_dist
+                if goal_rate > float(cycle_entry.get("goal_rate", 0.0)):
+                    cycle_entry["goal_rate"] = goal_rate
+                ts = row.get("timestamp") or ""
+                if ts and (not cycle_entry.get("timestamp") or ts > cycle_entry.get("timestamp")):
+                    cycle_entry["timestamp"] = ts
                 latest_by_run[run_id]["goal_rate"] = max(latest_by_run[run_id]["goal_rate"], goal_rate)
                 latest_by_run[run_id]["best_dist"] = min(latest_by_run[run_id]["best_dist"], best_dist)
                 if final_row is not None and final_col is not None:
@@ -845,7 +875,21 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
     best_dist = stats.get("best_dist", 1.0)
     reached = goal_rate > 0.0 or best_dist <= 1.0
     solved = goal_rate >= 0.9 and best_dist <= 1.0
-    if reached:
+    streak_env = os.getenv("MAZE_AUTO_GOAL_STREAK", "").strip()
+    try:
+        required_streak = max(1, int(streak_env)) if streak_env else 2
+    except ValueError:
+        required_streak = 2
+    streak = 0
+    cycles = sorted(per_run_cycles.get(last_run, {}).items(), key=lambda t: t[0])
+    for _, cstats in cycles:
+        c_reached = bool(float(cstats.get("goal_rate", 0.0)) > 0.0 or float(cstats.get("best_dist", 1e9)) <= 1.0)
+        if c_reached:
+            streak += 1
+        else:
+            streak = 0
+    advance = streak >= required_streak
+    if advance:
         if train_goal:
             train_goal = ""
         fraction = min(0.9, fraction + 0.03)
@@ -853,15 +897,6 @@ def _auto_training_goal_from_metrics(cfg: TrainConfig) -> Optional[Dict[str, str
         if train_goal:
             train_goal = ""
         fraction = min(0.9, fraction + 0.05)
-    else:
-        if best_dist > 40.0:
-            fraction = min(fraction, 0.2)
-        if goal_rate < 0.8:
-            fraction = min(fraction, 0.1)
-        if goal_rate < 0.5:
-            fraction = min(fraction, 0.08)
-        if goal_rate == 0.0:
-            fraction = min(fraction, 0.05)
     return {
         "train_goal": train_goal,
         "train_goal_fraction": str(max(0.05, min(0.9, fraction))),
