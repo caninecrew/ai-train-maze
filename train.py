@@ -512,6 +512,9 @@ def _metrics_fieldnames_for_game(game_name: str, extra_metrics: List[str]) -> Li
         "delta_reward",
         "train_goal",
         "train_goal_fraction",
+        "cycle_start",
+        "cycle_duration_s",
+        "eta_end",
         "timestamp",
         "run_timestamp",
         "game",
@@ -1158,7 +1161,8 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         cycle += 1
         print(f"\n=== Cycle {cycle} / {cfg.max_cycles} ===")
-        print(f"[cycle {cycle}] start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        cycle_started_at = datetime.now()
+        print(f"[cycle {cycle}] start: {cycle_started_at.strftime('%Y-%m-%d %H:%M:%S')}")
         start_cycle = time.time()
         if cfg.game == "maze":
             auto_goal = _auto_goal_enabled()
@@ -1384,6 +1388,13 @@ def main():
                 )
             _git_commit_artifacts(cfg, f"Update training outputs (cycle {cycle})")
 
+            cycle_seconds = max(0.0, time.time() - start_cycle)
+            cycle_durations.append(cycle_seconds)
+            avg_cycle = sum(cycle_durations) / len(cycle_durations)
+            remaining = max(0, cfg.max_cycles - cycle)
+            eta_seconds = avg_cycle * remaining
+            eta_at = datetime.now() + timedelta(seconds=eta_seconds)
+
             metrics_csv_exists = metrics_csv_path.exists()
             with metrics_csv_path.open("a", newline="", encoding="utf-8") as csvfile:
                 writer = csv.DictWriter(
@@ -1395,6 +1406,9 @@ def main():
                         "delta_reward",
                         "train_goal",
                         "train_goal_fraction",
+                        "cycle_start",
+                        "cycle_duration_s",
+                        "eta_end",
                         "timestamp",
                         "run_timestamp",
                         "game",
@@ -1413,6 +1427,9 @@ def main():
                     row["delta_reward"] = delta_reward if delta_reward is not None else ""
                     row["train_goal"] = train_goal
                     row["train_goal_fraction"] = train_goal_fraction
+                    row["cycle_start"] = cycle_started_at.strftime("%Y-%m-%d %H:%M:%S")
+                    row["cycle_duration_s"] = f"{cycle_seconds:.2f}"
+                    row["eta_end"] = eta_at.strftime("%Y-%m-%d %H:%M:%S")
                     row["timestamp"] = timestamp
                     row["run_timestamp"] = run_timestamp
                     row["game"] = game.name
@@ -1432,6 +1449,11 @@ def main():
             print(
                 f"Best model this cycle: {best_id} (avg reward {best_score_cycle:.3f}); "
                 f"elapsed {elapsed:.1f}s; no_improve={no_improve_cycles}"
+            )
+            print(
+                f"[cycle {cycle}] duration: {cycle_seconds/60:.1f} min | "
+                f"avg: {avg_cycle/60:.1f} min | "
+                f"eta: {eta_seconds/60:.1f} min (est end {eta_at.strftime('%Y-%m-%d %H:%M:%S')})"
             )
             cycle_reports.append(
                 {
@@ -1504,18 +1526,6 @@ def main():
             for model_id, metrics, _ in metrics_list:
                 tb_writer.add_scalar(f"{model_id}/avg_reward", metrics.get("avg_reward", 0.0), cycle)
                 tb_writer.add_scalar(f"{model_id}/win_rate", metrics.get("win_rate", 0.0), cycle)
-
-        cycle_seconds = max(0.0, time.time() - start_cycle)
-        cycle_durations.append(cycle_seconds)
-        avg_cycle = sum(cycle_durations) / len(cycle_durations)
-        remaining = max(0, cfg.max_cycles - cycle)
-        eta_seconds = avg_cycle * remaining
-        eta_at = datetime.now() + timedelta(seconds=eta_seconds)
-        print(
-            f"[cycle {cycle}] duration: {cycle_seconds/60:.1f} min | "
-            f"avg: {avg_cycle/60:.1f} min | "
-            f"eta: {eta_seconds/60:.1f} min (est end {eta_at.strftime('%Y-%m-%d %H:%M:%S')})"
-        )
 
     if tb_writer:
         tb_writer.close()
