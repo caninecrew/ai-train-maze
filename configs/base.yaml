@@ -12,7 +12,7 @@ defaults:
 profiles:
   quick:
     train_timesteps: 10000
-    iterations_per_set: 1
+    iterations_per_set: 3
     max_cycles: 1
     eval_episodes: 1
     video_steps: 300
