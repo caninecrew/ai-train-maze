@@ -1146,6 +1146,8 @@ def main():
     best_checkpoint_path: Optional[str] = None
 
     cycle = 0
+    run_started_at = datetime.now()
+    cycle_durations: List[float] = []
     initial_resume = cfg.resume_from if (cfg.resume_from and os.path.exists(cfg.resume_from)) else None
     while not failure_detected and cycle < cfg.max_cycles:
         combined_frames_per_model: List[List[np.ndarray]] = []
@@ -1156,6 +1158,7 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         cycle += 1
         print(f"\n=== Cycle {cycle} / {cfg.max_cycles} ===")
+        print(f"[cycle {cycle}] start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         start_cycle = time.time()
         if cfg.game == "maze":
             auto_goal = _auto_goal_enabled()
@@ -1502,6 +1505,18 @@ def main():
                 tb_writer.add_scalar(f"{model_id}/avg_reward", metrics.get("avg_reward", 0.0), cycle)
                 tb_writer.add_scalar(f"{model_id}/win_rate", metrics.get("win_rate", 0.0), cycle)
 
+        cycle_seconds = max(0.0, time.time() - start_cycle)
+        cycle_durations.append(cycle_seconds)
+        avg_cycle = sum(cycle_durations) / len(cycle_durations)
+        remaining = max(0, cfg.max_cycles - cycle)
+        eta_seconds = avg_cycle * remaining
+        eta_at = datetime.now() + timedelta(seconds=eta_seconds)
+        print(
+            f"[cycle {cycle}] duration: {cycle_seconds/60:.1f} min | "
+            f"avg: {avg_cycle/60:.1f} min | "
+            f"eta: {eta_seconds/60:.1f} min (est end {eta_at.strftime('%Y-%m-%d %H:%M:%S')})"
+        )
+
     if tb_writer:
         tb_writer.close()
 
@@ -1518,6 +1533,8 @@ def main():
         "last_eval_video": last_eval_video,
         "run_timestamp": run_timestamp,
         "stop_reason": stop_reason,
+        "run_started_at": run_started_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "run_ended_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "cycles": cycle_reports,
     }
     with open(log_file, "a", encoding="utf-8") as f:
