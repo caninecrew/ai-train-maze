@@ -1,12 +1,12 @@
 defaults:
   game: maze
   device: cpu
-  train_timesteps: 300000
+  train_timesteps: 500000
   n_steps: 256
   batch_size: 512
   n_epochs: 4
   n_envs: 8
-  eval_episodes: 3
+  eval_episodes: 16
   video_steps: 600
   max_video_seconds: 30
 profiles:

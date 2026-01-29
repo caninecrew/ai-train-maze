@@ -302,7 +302,7 @@ def _safe_write_video(frames: List[np.ndarray], path: Path, fps: int, final_over
 class TrainConfig:
     game: str = "template"
     model_prefix: Optional[str] = None
-    train_timesteps: int = 300_000
+    train_timesteps: int = 500_000
     n_steps: int = 256
     batch_size: int = 512
     n_epochs: int = 4
@@ -321,7 +321,7 @@ class TrainConfig:
     base_seed: int = 0
     early_stop_patience: int = 3
     improvement_threshold: float = 0.05
-    eval_episodes: int = 3
+    eval_episodes: int = 16
     eval_video_steps: int = 0
     long_eval_video_steps: int = 0
     top_k_checkpoints: int = 3
