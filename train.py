@@ -1075,12 +1075,10 @@ def _train_single(
             device=cfg.device,
         )
 
-    callback = GoalReachedStopCallback() if game_name == "maze" else None
     model.learn(
         total_timesteps=cfg.train_timesteps,
         reset_num_timesteps=False,
         progress_bar=_progress_bar_ready(suppress_log=True),
-        callback=callback,
     )
 
     stamped_model_path: Optional[str] = None
