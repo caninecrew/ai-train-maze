@@ -68,6 +68,7 @@ class MazeEnv(gym.Env):
         self._speed_power = 1.0
         self._fail_penalty = 0.0
         self._wall_hug_penalty = 0.0
+        self._turn_penalty = 0.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -163,6 +164,12 @@ class MazeEnv(gym.Env):
                 self._wall_hug_penalty = float(wall_hug_env)
             except ValueError:
                 self._wall_hug_penalty = 0.0
+        turn_penalty_env = os.getenv("MAZE_TURN_PENALTY", "").strip()
+        if turn_penalty_env:
+            try:
+                self._turn_penalty = float(turn_penalty_env)
+            except ValueError:
+                self._turn_penalty = 0.0
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> Tuple[int, int]:
         if value and len(value) == 2:
@@ -267,6 +274,8 @@ class MazeEnv(gym.Env):
             if self._prev_action is not None and action == reverse_map.get(self._prev_action):
                 reward += self._backtrack_penalty
                 self._backtracks += 1
+            if self._turn_penalty > 0.0 and self._prev_action is not None and action != self._prev_action:
+                reward -= self._turn_penalty
         else:
             reward += self._wall_penalty
             self._wall_hits += 1
