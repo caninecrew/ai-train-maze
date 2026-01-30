@@ -1298,6 +1298,9 @@ def main():
             except ValueError:
                 worker_timeout = 1800
             no_multiproc = os.getenv("TRAIN_NO_MULTIPROC", "").strip().lower() in {"1", "true", "yes", "on"}
+            if os.name == "nt" and not no_multiproc:
+                print("[cycle] Windows detected; forcing single-process training to avoid spawn/import crashes.")
+                no_multiproc = True
             if no_multiproc:
                 for idx, model_id in enumerate(model_ids):
                     derived_seed = base_seed + idx + cycle
