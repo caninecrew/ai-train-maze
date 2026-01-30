@@ -314,8 +314,8 @@ class TrainConfig:
     video_steps: int = 600  # total frames per cycle video
     max_cycles: int = 5
     checkpoint_interval: int = 1  # cycles between timestamped checkpoints
-    iterations_per_set: int = 6  # how many parallel model lines to train each cycle
-    n_envs: int = 8  # vectorized envs per PPO learner
+    iterations_per_set: int = 4  # how many parallel model lines to train each cycle
+    n_envs: int = 12  # vectorized envs per PPO learner
     seed: int = 0
     deterministic: bool = False
     base_seed: int = 0
@@ -328,7 +328,7 @@ class TrainConfig:
     no_checkpoint: bool = False
     individual_videos: bool = False
     cpu_affinity: Optional[str] = None  # e.g. "0,1,2" or "auto"
-    num_threads: Optional[int] = None
+    num_threads: Optional[int] = 2
     video_dir: str = "videos"
     model_dir: str = "models"
     log_dir: str = "logs"

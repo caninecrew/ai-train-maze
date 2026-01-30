@@ -5,7 +5,9 @@ defaults:
   n_steps: 256
   batch_size: 512
   n_epochs: 4
-  n_envs: 8
+  n_envs: 12
+  iterations_per_set: 4
+  num_threads: 2
   eval_episodes: 16
   video_steps: 600
   max_video_seconds: 30
