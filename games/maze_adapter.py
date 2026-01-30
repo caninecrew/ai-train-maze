@@ -54,7 +54,7 @@ class MazeEnv(gym.Env):
         self._step_penalty = -0.0005
         self._goal_bonus = 500.0
         self._idle_penalty = -0.001
-        self._move_bonus = 0.01
+        self._move_bonus = 0.0
         self._cookie_bonus = 0.05
         self._shaping_coef = 0.1
         self._novelty_bonus = 0.02
@@ -96,12 +96,6 @@ class MazeEnv(gym.Env):
                 self._cell_size = 8
         else:
             self._cell_size = 8
-        move_bonus_env = os.getenv("MAZE_MOVE_BONUS", "").strip()
-        if move_bonus_env:
-            try:
-                self._move_bonus = float(move_bonus_env)
-            except ValueError:
-                self._move_bonus = 0.01
         cookie_bonus_env = os.getenv("MAZE_COOKIE_BONUS", "").strip()
         if cookie_bonus_env:
             try:
@@ -238,7 +232,6 @@ class MazeEnv(gym.Env):
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
             self._consec_wall_hits = 0
-            reward += self._move_bonus
             new_dist = self._dist_at(self._agent)
             if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
@@ -508,9 +501,9 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         "final_col": float(np.nanmean(final_cols)) if final_cols else float("nan"),
         "wall_hit_rate": float(np.mean(wall_hit_rate)) if wall_hit_rate else 0.0,
         "idle_rate": float(np.mean(idle_rate)) if idle_rate else 0.0,
-            "backtrack_rate": float(np.mean(backtrack_rate)) if backtrack_rate else 0.0,
-            "novel_rate": float(np.mean(novel_rate)) if novel_rate else 0.0,
-        }
+        "backtrack_rate": float(np.mean(backtrack_rate)) if backtrack_rate else 0.0,
+        "novel_rate": float(np.mean(novel_rate)) if novel_rate else 0.0,
+    }
 
 
 def _make_env(render_mode: Optional[str], seed: Optional[int], variant: Optional[int]) -> gym.Env:
