@@ -1,6 +1,9 @@
 defaults:
   game: maze
   device: cpu
+  env:
+    MAZE_OBS_MODE: "pos+rays"
+    MAZE_SENSOR_RANGE: 6
 train_timesteps: 750000
 n_steps: 512
 batch_size: 512

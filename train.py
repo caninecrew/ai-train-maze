@@ -398,6 +398,25 @@ def _merge_profile_config(file_cfg: Dict[str, Any], profile: Optional[str]) -> D
     return merged
 
 
+def _extract_env_config(file_cfg: Dict[str, Any], profile: Optional[str]) -> Dict[str, str]:
+    defaults = file_cfg.get("defaults", {})
+    profiles = file_cfg.get("profiles", {})
+    env_cfg = {}
+    if isinstance(defaults, dict) and isinstance(defaults.get("env"), dict):
+        env_cfg.update(defaults.get("env", {}))
+    if profile and isinstance(profiles, dict) and profile in profiles:
+        overrides = profiles[profile]
+        if isinstance(overrides, dict) and isinstance(overrides.get("env"), dict):
+            env_cfg.update(overrides.get("env", {}))
+    return {str(k): str(v) for k, v in env_cfg.items()}
+
+
+def _apply_env_config(env_cfg: Dict[str, str]) -> None:
+    for key, value in env_cfg.items():
+        if key and (key not in os.environ or os.environ.get(key, "").strip() == ""):
+            os.environ[key] = value
+
+
 def _apply_profile(cfg: TrainConfig) -> None:
     """
     Apply preset overrides for common workflows.
@@ -543,6 +562,7 @@ def parse_args() -> TrainConfig:
     known, remaining = base_parser.parse_known_args()
     file_cfg = _load_config_file(known.config)
     defaults_from_file = _merge_profile_config(file_cfg, known.profile)
+    env_from_file = _extract_env_config(file_cfg, known.profile)
 
     parser = argparse.ArgumentParser(description="Train PPO agents for a registered game.", parents=[base_parser])
     parser.add_argument("--game", type=str, default=defaults_from_file.get("game", TrainConfig.game), help="Game key to train.")
@@ -657,6 +677,7 @@ def parse_args() -> TrainConfig:
         export_config=args.export_config,
     )
     _apply_profile(cfg)
+    _apply_env_config(env_from_file)
     if cfg.video_steps > cfg.max_video_frames:
         print(
             f"Warning: video_steps ({cfg.video_steps}) exceeds max frames from max_video_seconds*target_fps ({cfg.max_video_frames}). "
