@@ -9,6 +9,7 @@ defaults:
     MAZE_SPEED_POWER: 1.5
     MAZE_NOVELTY_BONUS: 0.002
     MAZE_BACKTRACK_PENALTY: -0.3
+    MAZE_FAIL_PENALTY: 50.0
 train_timesteps: 750000
 n_steps: 512
 batch_size: 512

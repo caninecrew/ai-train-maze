@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Sequence, Tuple, cast
 
 import gymnasium as gym
 import numpy as np
@@ -66,6 +66,7 @@ class MazeEnv(gym.Env):
         self._speed_bonus = 0.0
         self._slow_penalty = 0.0
         self._speed_power = 1.0
+        self._fail_penalty = 0.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -155,7 +156,14 @@ class MazeEnv(gym.Env):
                 self._slow_penalty = float(slow_penalty_env)
             except ValueError:
                 self._slow_penalty = 0.0
-    def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
+        fail_penalty_env = os.getenv("MAZE_FAIL_PENALTY", "").strip()
+        if fail_penalty_env:
+            try:
+                self._fail_penalty = float(fail_penalty_env)
+            except ValueError:
+                self._fail_penalty = 0.0
+
+    def _sanitize_point(self, value: Optional[list], fallback: str) -> Tuple[int, int]:
         if value and len(value) == 2:
             r, c = int(value[0]), int(value[1])
             if 0 <= r < self._rows and 0 <= c < self._cols and self._grid[r, c] == 0:
@@ -164,13 +172,13 @@ class MazeEnv(gym.Env):
             opens = np.argwhere(self._grid == 0)
             if opens.size == 0:
                 raise ValueError("Maze has no open cells.")
-            return tuple(opens[0])
+            return cast(Tuple[int, int], tuple(opens[0]))
         opens = np.argwhere(self._grid == 0)
         if opens.size == 0:
             raise ValueError("Maze has no open cells.")
-        return tuple(opens[-1])
+        return cast(Tuple[int, int], tuple(opens[-1]))
 
-    def _apply_training_goal(self, base_goal: tuple[int, int]) -> tuple[int, int]:
+    def _apply_training_goal(self, base_goal: Tuple[int, int]) -> Tuple[int, int]:
         train_mode = os.getenv("MAZE_TRAIN_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
         if not train_mode:
             return base_goal
@@ -198,12 +206,12 @@ class MazeEnv(gym.Env):
         candidates = np.argwhere(dist_start == target_dist)
         if candidates.size == 0:
             return base_goal
-        return tuple(candidates[0])
+        return cast(Tuple[int, int], tuple(candidates[0]))
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
-        self._agent = tuple(self._start)
+        self._agent = cast(Tuple[int, int], tuple(self._start))
         self._step_count = 0
         self._prev_dist = self._dist_at(self._agent)
         self._best_dist = self._prev_dist
@@ -284,14 +292,16 @@ class MazeEnv(gym.Env):
             if terminated and self._slow_penalty > 0.0:
                 frac = self._step_count / max(1, self._max_steps)
                 reward -= self._slow_penalty * frac
+            if truncated and self._fail_penalty > 0.0:
+                reward -= self._fail_penalty
         info = {"goal_reached": float(self._agent == self._goal)}
         return self._obs(), reward, terminated, truncated, info
 
-    def _dist_at(self, pos: tuple[int, int]) -> float:
+    def _dist_at(self, pos: Tuple[int, int]) -> float:
         r, c = pos
         return float(self._dist_map[r, c])
 
-    def _compute_distances(self, goal: tuple[int, int]) -> np.ndarray:
+    def _compute_distances(self, goal: Tuple[int, int]) -> np.ndarray:
         dist = np.full((self._rows, self._cols), np.inf, dtype=np.float32)
         gr, gc = goal
         if self._grid[gr, gc] != 0:
@@ -368,7 +378,7 @@ class MazeEnv(gym.Env):
             agent_color=color,
         )
 
-    def get_agent_cell(self) -> tuple[int, int]:
+    def get_agent_cell(self) -> Tuple[int, int]:
         return self._agent
 
     def get_eval_stats(self) -> Dict[str, float]:
@@ -400,7 +410,7 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         seed_base = None
     env = _make_env(render_mode=None, seed=None, variant=None)
     rewards: List[float] = []
-    lengths: List[int] = []
+    lengths: List[float] = []
     goals: List[float] = []
     best_dists: List[float] = []
     best_progress: List[float] = []
@@ -432,8 +442,8 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
             ep_steps += 1
             done = terminated or truncated
         rewards.append(ep_reward)
-        lengths.append(ep_steps)
-        stats = env.get_eval_stats() if hasattr(env, "get_eval_stats") else {}
+        lengths.append(float(ep_steps))
+        stats = cast(Any, env).get_eval_stats() if hasattr(env, "get_eval_stats") else {}
         goal_reached = float(stats.get("goal_reached", 0.0))
         if not goal_reached:
             best_dist_val = stats.get("best_dist")
@@ -471,7 +481,7 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         novel_rate.append(float(stats.get("novel_steps", 0.0)) / denom)
     env.close()
 
-    def _ci(values: List[float]) -> float:
+    def _ci(values: Sequence[float]) -> float:
         if len(values) < 2:
             return 0.0
         std = float(np.std(values, ddof=1))
@@ -498,15 +508,8 @@ def _evaluate_maze(model: Any, episodes: int, deterministic: bool = True) -> Dic
         "final_col": float(np.nanmean(final_cols)) if final_cols else float("nan"),
         "wall_hit_rate": float(np.mean(wall_hit_rate)) if wall_hit_rate else 0.0,
         "idle_rate": float(np.mean(idle_rate)) if idle_rate else 0.0,
-        "backtrack_rate": float(np.mean(backtrack_rate)) if backtrack_rate else 0.0,
-        "novel_rate": float(np.mean(novel_rate)) if novel_rate else 0.0,
-    }
-    def get_eval_stats(self) -> Dict[str, float]:
-        return {
-            "goal_reached": float(self._agent == self._goal),
-            "best_dist": float(self._best_dist),
-            "best_progress": float(self._start_dist - self._best_dist),
-            "steps": float(self._step_count),
+            "backtrack_rate": float(np.mean(backtrack_rate)) if backtrack_rate else 0.0,
+            "novel_rate": float(np.mean(novel_rate)) if novel_rate else 0.0,
         }
 
 
