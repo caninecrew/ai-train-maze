@@ -3,26 +3,26 @@
 A game-agnostic PPO training base with a modular adapter registry. This repo is a starting point for training an AI on your own environment.
 
 ## Maze-solving pipeline
-This repo can power a maze-solving AI system that separates three concerns: maze design, fast training/solving, and visual playback.
+This repo powers a maze-solving PPO system with a Gymnasium adapter, per-cycle metrics, and video capture.
 
 What it does:
 - Maze input (human-friendly): design a maze as a PNG so you can edit walls visually.
 - Conversion (training-friendly): convert the PNG into a compact grid (wall/open) and cache it.
-- Fast solving/training: run on the fixed-size grid to keep the state space small; use shaping, imitation, or BFS/A* for near-instant paths.
-- Visual output: render a video by overlaying the agent path on the original PNG and export an MP4.
+- Fast training: run PPO on the grid with shaping and extra metrics (goal rate, best distance, steps, wall hits).
+- Visual output: render a training rollout to MP4.
 
 Deliverables:
 - `assets/mazes/maze_001.png`: the visual maze you designed.
 - `data/mazes/maze_001/maze_001_grid.npy` or `.txt`: the AI-readable grid.
 - `data/mazes/maze_001/maze_001_meta.json`: grid size plus start/goal.
-- `outputs/mazes/maze_001/maze_001_run.mp4`: the character moving through the original maze image.
+- `videos/`: combined and per-model training clips (if enabled).
 
 Best practices and naming convention:
 - See `docs/maze_best_practices.md` for the full pipeline, thresholds, and scaling guidance.
 - Maze IDs use `maze_###` (e.g., `maze_001`) and stay consistent across assets/data/outputs.
 - Optional per-maze config can live at `assets/mazes/maze_###.json` (rows/cols, thresholds, wall_ratio).
 - GitHub Actions: run `maze-convert-and-train` manually to convert the latest maze and train; adjust `max_cycles` and `train_args` as needed.
-- Local training: use `scripts/mazes/train_local.ps1` (Windows) or `scripts/mazes/train_local.sh` (macOS/Linux). They auto-resume from the best checkpoint in `logs/metrics.csv` when present.
+- Local training: use `scripts/mazes/train_local.ps1` (Windows) or `scripts/mazes/train_local.sh` (macOS/Linux). They auto-resume from the latest checkpoint when present.
 
 ## What's in this repo
 - `train.py`: generic PPO training loop with profiles, checkpoints, metrics, videos, and reports.
@@ -69,7 +69,7 @@ python train.py --game template --config configs/template.yaml
 
 Maze training (uses latest converted maze by default):
 ```
-python train.py --game maze --config configs/maze.yaml
+python train.py --game maze --config configs/base.yaml
 ```
 
 Override with CLI flags:
@@ -97,6 +97,13 @@ Optional flags:
 python dashboard.py
 ```
 Then open `http://127.0.0.1:8000`.
+
+## Maze tuning (env vars)
+These are read from the config `env:` section or directly from the environment.
+- Observation: `MAZE_OBS_MODE=pos|rays|pos+rays`, `MAZE_SENSOR_RANGE=6`
+- Speed shaping: `MAZE_SPEED_BONUS`, `MAZE_SPEED_POWER`, `MAZE_SLOW_PENALTY`
+- Penalties: `MAZE_FAIL_PENALTY`, `MAZE_WALL_HUG_PENALTY`, `MAZE_TURN_PENALTY`, `MAZE_BACKTRACK_PENALTY`
+- Shaping: `MAZE_SHAPING_COEF`, `MAZE_COOKIE_BONUS`, `MAZE_NOVELTY_BONUS`
 
 ## Common recipes
 - Quick smoke (headless, short): `python train.py --game template --profile quick --max-cycles 1 --dry-run`

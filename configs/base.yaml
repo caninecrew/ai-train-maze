@@ -13,6 +13,7 @@ defaults:
     MAZE_SHAPING_COEF: 0.2
     MAZE_TURN_PENALTY: 0.01
     MAZE_SLOW_PENALTY: 8.0
+    MAZE_WRONG_WAY_PENALTY: 0.05
 train_timesteps: 750000
 n_steps: 512
 batch_size: 512

@@ -69,6 +69,7 @@ class MazeEnv(gym.Env):
         self._fail_penalty = 0.0
         self._wall_hug_penalty = 0.0
         self._turn_penalty = 0.0
+        self._wrong_way_penalty = 0.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -170,6 +171,12 @@ class MazeEnv(gym.Env):
                 self._turn_penalty = float(turn_penalty_env)
             except ValueError:
                 self._turn_penalty = 0.0
+        wrong_way_env = os.getenv("MAZE_WRONG_WAY_PENALTY", "").strip()
+        if wrong_way_env:
+            try:
+                self._wrong_way_penalty = float(wrong_way_env)
+            except ValueError:
+                self._wrong_way_penalty = 0.0
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> Tuple[int, int]:
         if value and len(value) == 2:
@@ -251,6 +258,8 @@ class MazeEnv(gym.Env):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
                 if new_dist < self._prev_dist:
                     reward += self._cookie_bonus
+                elif new_dist > self._prev_dist and self._wrong_way_penalty > 0.0:
+                    reward -= self._wrong_way_penalty * (new_dist - self._prev_dist)
             if self._wall_hug_penalty > 0.0 and (self._prev_action is None or action == self._prev_action):
                 walls = 0
                 for rr, cc in ((nr - 1, nc), (nr + 1, nc), (nr, nc - 1), (nr, nc + 1)):
