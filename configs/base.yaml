@@ -36,6 +36,10 @@ profiles:
     max_video_seconds: 20
     checkpoint_interval: 0
     no_checkpoint: true
+  novideo:
+    video_steps: 0
+    eval_video_steps: 0
+    long_eval_video_steps: 0
   gpu:
     device: cuda
     batch_size: 1024
