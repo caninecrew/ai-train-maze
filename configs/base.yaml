@@ -40,6 +40,11 @@ profiles:
     video_steps: 0
     eval_video_steps: 0
     long_eval_video_steps: 0
+  novideo_unbounded:
+    video_steps: 0
+    eval_video_steps: 0
+    long_eval_video_steps: 0
+    max_cycles: 999999
   gpu:
     device: cuda
     batch_size: 1024
