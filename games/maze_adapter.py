@@ -276,7 +276,8 @@ class MazeEnv(gym.Env):
             if terminated and self._slow_penalty > 0.0:
                 frac = self._step_count / max(1, self._max_steps)
                 reward -= self._slow_penalty * frac
-        return self._obs(), reward, terminated, truncated, {}
+        info = {"goal_reached": float(self._agent == self._goal)}
+        return self._obs(), reward, terminated, truncated, info
 
     def _dist_at(self, pos: tuple[int, int]) -> float:
         r, c = pos

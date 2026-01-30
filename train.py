@@ -20,6 +20,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
 
@@ -43,7 +44,27 @@ def _tensorboard_available() -> bool:
         if not _tensorboard_checked:
             print("TensorBoard not installed; run `python -m pip install tensorboard` to enable logging.")
             _tensorboard_checked = True
-        return False
+    return False
+
+
+class GoalReachedStopCallback(BaseCallback):
+    def __init__(self):
+        super().__init__()
+        self._triggered = False
+
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        for info in infos:
+            try:
+                if float(info.get("goal_reached", 0.0)) >= 1.0:
+                    self._triggered = True
+                    break
+            except Exception:
+                continue
+        if self._triggered:
+            print("[train] Goal reached in rollout; stopping this model early.")
+            return False
+        return True
 
 
 def _parse_resolution(res_str: str) -> Tuple[int, int]:
@@ -1054,10 +1075,12 @@ def _train_single(
             device=cfg.device,
         )
 
+    callback = GoalReachedStopCallback() if game_name == "maze" else None
     model.learn(
         total_timesteps=cfg.train_timesteps,
         reset_num_timesteps=False,
         progress_bar=_progress_bar_ready(suppress_log=True),
+        callback=callback,
     )
 
     stamped_model_path: Optional[str] = None
@@ -1252,7 +1275,6 @@ def main():
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
         seed_by_model: Dict[str, int] = {}
-        stop_cycle_early = False
         try:
             if best_checkpoint_path and os.path.exists(best_checkpoint_path):
                 for model_id in model_ids:
@@ -1305,14 +1327,6 @@ def main():
                     timestamp = stamp  # use last reported for video naming
                     seed_by_model[model_id] = derived_seed
                     print(f"[{model_id}] Training done; seed={derived_seed}")
-                    try:
-                        goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
-                    except Exception:
-                        goal_rate = 0.0
-                    if goal_rate >= 1.0:
-                        print("[cycle] Goal reached by a model; ending cycle early.")
-                        stop_cycle_early = True
-                        break
             else:
                 executor = concurrent.futures.ProcessPoolExecutor(
                     max_workers=cfg.iterations_per_set,
@@ -1358,18 +1372,6 @@ def main():
                             seed_used = seed_by_future.get(future, base_seed)
                             seed_by_model[model_id] = seed_used
                             print(f"[{model_id}] Training done; seed={seed_used}")
-                            try:
-                                goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
-                            except Exception:
-                                goal_rate = 0.0
-                            if goal_rate >= 1.0:
-                                print("[cycle] Goal reached by a model; canceling remaining workers.")
-                                stop_cycle_early = True
-                                for pending in futures:
-                                    if not pending.done():
-                                        pending.cancel()
-                                force_shutdown = True
-                                break
                     except concurrent.futures.TimeoutError:
                         print(f"[watchdog] Worker(s) timed out after {worker_timeout}s; canceling remaining.")
                         for future in futures:
