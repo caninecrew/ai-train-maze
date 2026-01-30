@@ -63,6 +63,7 @@ class MazeEnv(gym.Env):
         self._best_dist_bonus = 0.1
         self._best_dist_hit_bonus = 0.2
         self._best_progress_bonus = 0.08
+        self._speed_bonus = 0.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -134,6 +135,12 @@ class MazeEnv(gym.Env):
                 self._consec_wall_penalty = float(consec_wall_penalty_env)
             except ValueError:
                 self._consec_wall_penalty = -0.25
+        speed_bonus_env = os.getenv("MAZE_SPEED_BONUS", "").strip()
+        if speed_bonus_env:
+            try:
+                self._speed_bonus = float(speed_bonus_env)
+            except ValueError:
+                self._speed_bonus = 0.0
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
             r, c = int(value[0]), int(value[1])
@@ -256,6 +263,9 @@ class MazeEnv(gym.Env):
         if terminated or truncated:
             if np.isfinite(self._start_dist) and np.isfinite(self._best_dist):
                 reward += self._best_progress_bonus * (self._start_dist - self._best_dist)
+            if terminated and self._speed_bonus > 0.0:
+                remaining = max(0, self._max_steps - self._step_count)
+                reward += self._speed_bonus * (remaining / max(1, self._max_steps))
         return self._obs(), reward, terminated, truncated, {}
 
     def _dist_at(self, pos: tuple[int, int]) -> float:
