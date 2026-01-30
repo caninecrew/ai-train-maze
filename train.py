@@ -1252,6 +1252,7 @@ def main():
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
         seed_by_model: Dict[str, int] = {}
+        stop_cycle_early = False
         try:
             if best_checkpoint_path and os.path.exists(best_checkpoint_path):
                 for model_id in model_ids:
@@ -1304,6 +1305,14 @@ def main():
                     timestamp = stamp  # use last reported for video naming
                     seed_by_model[model_id] = derived_seed
                     print(f"[{model_id}] Training done; seed={derived_seed}")
+                    try:
+                        goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
+                    except Exception:
+                        goal_rate = 0.0
+                    if goal_rate >= 1.0:
+                        print("[cycle] Goal reached by a model; ending cycle early.")
+                        stop_cycle_early = True
+                        break
             else:
                 executor = concurrent.futures.ProcessPoolExecutor(
                     max_workers=cfg.iterations_per_set,
@@ -1349,6 +1358,18 @@ def main():
                             seed_used = seed_by_future.get(future, base_seed)
                             seed_by_model[model_id] = seed_used
                             print(f"[{model_id}] Training done; seed={seed_used}")
+                            try:
+                                goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
+                            except Exception:
+                                goal_rate = 0.0
+                            if goal_rate >= 1.0:
+                                print("[cycle] Goal reached by a model; canceling remaining workers.")
+                                stop_cycle_early = True
+                                for pending in futures:
+                                    if not pending.done():
+                                        pending.cancel()
+                                force_shutdown = True
+                                break
                     except concurrent.futures.TimeoutError:
                         print(f"[watchdog] Worker(s) timed out after {worker_timeout}s; canceling remaining.")
                         for future in futures:
@@ -1608,7 +1629,6 @@ def main():
             print(f"No improvement for {no_improve_cycles} cycles; stopping early.")
             stop_reason = "early_stop"
             break
-
         if all_grid_frames:
             overlay_text = ""
             if scores:
