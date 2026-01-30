@@ -1674,6 +1674,24 @@ def main():
         else:
             print("No frames captured; combined video not written.")
 
+        if cfg.eval_video_steps and best_checkpoint_path and os.path.exists(best_checkpoint_path):
+            try:
+                best_model = PPO.load(best_checkpoint_path, device=cfg.device)
+                frames = record_video_segment(
+                    game,
+                    best_model,
+                    steps=cfg.eval_video_steps,
+                    overlay_text=f"Eval {best_id}",
+                    resolution=_parse_resolution(cfg.video_resolution),
+                    seed=base_seed + cycle,
+                )
+                eval_path = Path(cfg.video_dir) / f"{best_id}_eval_{timestamp}_seed{base_seed}.mp4"
+                if _safe_write_video(frames, eval_path, cfg.target_fps):
+                    print(f"[eval] Saved eval video: {eval_path}")
+                    last_eval_video = str(eval_path)
+            except Exception:
+                print("[eval] Failed to capture eval video.")
+
         if cfg.long_eval_video_steps and best_checkpoint_path and os.path.exists(best_checkpoint_path):
             try:
                 best_model = PPO.load(best_checkpoint_path, device=cfg.device)
