@@ -4,6 +4,11 @@ defaults:
   env:
     MAZE_OBS_MODE: "pos+rays"
     MAZE_SENSOR_RANGE: 6
+    MAZE_SLOW_PENALTY: 5.0
+    MAZE_SPEED_BONUS: 10.0
+    MAZE_SPEED_POWER: 1.5
+    MAZE_NOVELTY_BONUS: 0.002
+    MAZE_BACKTRACK_PENALTY: -0.3
 train_timesteps: 750000
 n_steps: 512
 batch_size: 512

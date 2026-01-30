@@ -65,6 +65,7 @@ class MazeEnv(gym.Env):
         self._best_progress_bonus = 0.08
         self._speed_bonus = 0.0
         self._slow_penalty = 0.0
+        self._speed_power = 1.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -142,6 +143,12 @@ class MazeEnv(gym.Env):
                 self._speed_bonus = float(speed_bonus_env)
             except ValueError:
                 self._speed_bonus = 0.0
+        speed_power_env = os.getenv("MAZE_SPEED_POWER", "").strip()
+        if speed_power_env:
+            try:
+                self._speed_power = max(0.1, float(speed_power_env))
+            except ValueError:
+                self._speed_power = 1.0
         slow_penalty_env = os.getenv("MAZE_SLOW_PENALTY", "").strip()
         if slow_penalty_env:
             try:
@@ -272,7 +279,8 @@ class MazeEnv(gym.Env):
                 reward += self._best_progress_bonus * (self._start_dist - self._best_dist)
             if terminated and self._speed_bonus > 0.0:
                 remaining = max(0, self._max_steps - self._step_count)
-                reward += self._speed_bonus * (remaining / max(1, self._max_steps))
+                frac = remaining / max(1, self._max_steps)
+                reward += self._speed_bonus * (frac ** self._speed_power)
             if terminated and self._slow_penalty > 0.0:
                 frac = self._step_count / max(1, self._max_steps)
                 reward -= self._slow_penalty * frac
