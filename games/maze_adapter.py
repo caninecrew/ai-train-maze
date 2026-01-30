@@ -67,6 +67,7 @@ class MazeEnv(gym.Env):
         self._slow_penalty = 0.0
         self._speed_power = 1.0
         self._fail_penalty = 0.0
+        self._wall_hug_penalty = 0.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -156,6 +157,12 @@ class MazeEnv(gym.Env):
                 self._fail_penalty = float(fail_penalty_env)
             except ValueError:
                 self._fail_penalty = 0.0
+        wall_hug_env = os.getenv("MAZE_WALL_HUG_PENALTY", "").strip()
+        if wall_hug_env:
+            try:
+                self._wall_hug_penalty = float(wall_hug_env)
+            except ValueError:
+                self._wall_hug_penalty = 0.0
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> Tuple[int, int]:
         if value and len(value) == 2:
@@ -237,6 +244,13 @@ class MazeEnv(gym.Env):
                 reward += self._shaping_coef * (self._prev_dist - new_dist)
                 if new_dist < self._prev_dist:
                     reward += self._cookie_bonus
+            if self._wall_hug_penalty > 0.0 and (self._prev_action is None or action == self._prev_action):
+                walls = 0
+                for rr, cc in ((nr - 1, nc), (nr + 1, nc), (nr, nc - 1), (nr, nc + 1)):
+                    if rr < 0 or rr >= self._rows or cc < 0 or cc >= self._cols or self._grid[rr, cc] != 0:
+                        walls += 1
+                if walls:
+                    reward -= self._wall_hug_penalty * (walls / 4.0)
             if np.isfinite(new_dist) and new_dist < self._best_dist:
                 reward += self._best_dist_bonus * (self._best_dist - new_dist)
                 self._best_dist = new_dist
