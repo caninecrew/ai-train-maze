@@ -579,7 +579,7 @@ def _metrics_fieldnames_for_game(game_name: str, extra_metrics: List[str]) -> Li
 def parse_args() -> TrainConfig:
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument("--config", type=str, help="Path to YAML/JSON config to merge.")
-    base_parser.add_argument("--profile", choices=["quick", "single", "gpu"], help="Preset overrides for common workflows.")
+    base_parser.add_argument("--profile", choices=["quick", "single", "gpu", "novideo", "novideo_unbounded"], help="Preset overrides for common workflows.")
     known, remaining = base_parser.parse_known_args()
     file_cfg = _load_config_file(known.config)
     defaults_from_file = _merge_profile_config(file_cfg, known.profile)
