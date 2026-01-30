@@ -1301,8 +1301,13 @@ def main():
                 allow_win_multi = allow_win_multi_env in {"1", "true", "yes", "on"}
             else:
                 allow_win_multi = os.name == "nt"
+            use_threads_env = os.getenv("TRAIN_USE_THREADS_WIN", "").strip().lower()
+            use_threads_win = use_threads_env in {"1", "true", "yes", "on"} if use_threads_env else True
             if os.name == "nt" and allow_win_multi and not no_multiproc:
-                print("[cycle] Windows multiprocessing enabled (set TRAIN_ALLOW_MULTIPROC_WIN=0 to disable).")
+                if use_threads_win:
+                    print("[cycle] Windows parallelism enabled via threads (set TRAIN_USE_THREADS_WIN=0 to use processes).")
+                else:
+                    print("[cycle] Windows multiprocessing enabled (set TRAIN_ALLOW_MULTIPROC_WIN=0 to disable).")
             if os.name == "nt" and not no_multiproc and not allow_win_multi:
                 print("[cycle] Windows detected; forcing single-process training to avoid spawn/import crashes.")
                 print("[cycle] Set TRAIN_ALLOW_MULTIPROC_WIN=1 to override.")
@@ -1337,10 +1342,13 @@ def main():
                     seed_by_model[model_id] = derived_seed
                     print(f"[{model_id}] Training done; seed={derived_seed}")
             else:
-                executor = concurrent.futures.ProcessPoolExecutor(
-                    max_workers=cfg.iterations_per_set,
-                    mp_context=mp.get_context("spawn"),
-                )
+                if os.name == "nt" and allow_win_multi and use_threads_win:
+                    executor = concurrent.futures.ThreadPoolExecutor(max_workers=cfg.iterations_per_set)
+                else:
+                    executor = concurrent.futures.ProcessPoolExecutor(
+                        max_workers=cfg.iterations_per_set,
+                        mp_context=mp.get_context("spawn"),
+                    )
                 force_shutdown = False
                 try:
                     for idx, model_id in enumerate(model_ids):
