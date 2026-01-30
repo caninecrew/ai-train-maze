@@ -1298,8 +1298,16 @@ def main():
             except ValueError:
                 worker_timeout = 1800
             no_multiproc = os.getenv("TRAIN_NO_MULTIPROC", "").strip().lower() in {"1", "true", "yes", "on"}
-            if os.name == "nt" and not no_multiproc:
+            allow_win_multi_env = os.getenv("TRAIN_ALLOW_MULTIPROC_WIN", "").strip().lower()
+            if allow_win_multi_env:
+                allow_win_multi = allow_win_multi_env in {"1", "true", "yes", "on"}
+            else:
+                allow_win_multi = os.name == "nt"
+            if os.name == "nt" and allow_win_multi and not no_multiproc:
+                print("[cycle] Windows multiprocessing enabled (set TRAIN_ALLOW_MULTIPROC_WIN=0 to disable).")
+            if os.name == "nt" and not no_multiproc and not allow_win_multi:
                 print("[cycle] Windows detected; forcing single-process training to avoid spawn/import crashes.")
+                print("[cycle] Set TRAIN_ALLOW_MULTIPROC_WIN=1 to override.")
                 no_multiproc = True
             if no_multiproc:
                 for idx, model_id in enumerate(model_ids):
