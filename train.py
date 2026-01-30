@@ -319,7 +319,7 @@ class TrainConfig:
     seed: int = 0
     deterministic: bool = False
     base_seed: int = 0
-    early_stop_patience: int = 3
+    early_stop_patience: int = 0
     improvement_threshold: float = 0.05
     eval_episodes: int = 16
     eval_video_steps: int = 0
@@ -1604,7 +1604,7 @@ def main():
         else:
             print("No scores recorded; cannot propagate best model.")
 
-        if no_improve_cycles >= cfg.early_stop_patience:
+        if cfg.early_stop_patience > 0 and no_improve_cycles >= cfg.early_stop_patience:
             print(f"No improvement for {no_improve_cycles} cycles; stopping early.")
             stop_reason = "early_stop"
             break

@@ -63,20 +63,12 @@ class MazeEnv(gym.Env):
         self._best_dist_bonus = 0.1
         self._best_dist_hit_bonus = 0.2
         self._best_progress_bonus = 0.08
-        self._helper_count = 0
-        self._helper_base_bonus = 0.25
-        self._helper_power = 1.5
-        self._helper_decay_steps = 0
-
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
         base_goal = self._sanitize_point(goal, fallback="goal")
         self._goal = self._apply_training_goal(base_goal)
         self._dist_map = self._compute_distances(self._goal)
-        self._helper_cells: List[tuple[int, int]] = []
-        self._helper_weights: List[float] = []
-
         self._obs_mode = os.getenv("MAZE_OBS_MODE", "pos").strip().lower()
         sensor_range_env = os.getenv("MAZE_SENSOR_RANGE", "").strip()
         self._sensor_range = None
@@ -142,35 +134,6 @@ class MazeEnv(gym.Env):
                 self._consec_wall_penalty = float(consec_wall_penalty_env)
             except ValueError:
                 self._consec_wall_penalty = -0.25
-        helper_count_env = os.getenv("MAZE_HELPER_DOTS", "").strip()
-        if helper_count_env:
-            try:
-                self._helper_count = max(0, int(helper_count_env))
-            except ValueError:
-                self._helper_count = 0
-        helper_bonus_env = os.getenv("MAZE_HELPER_BONUS", "").strip()
-        if helper_bonus_env:
-            try:
-                self._helper_base_bonus = float(helper_bonus_env)
-            except ValueError:
-                self._helper_base_bonus = 0.25
-        helper_power_env = os.getenv("MAZE_HELPER_POWER", "").strip()
-        if helper_power_env:
-            try:
-                self._helper_power = float(helper_power_env)
-            except ValueError:
-                self._helper_power = 1.5
-        helper_decay_env = os.getenv("MAZE_HELPER_DECAY_STEPS", "").strip()
-        if helper_decay_env:
-            try:
-                self._helper_decay_steps = max(0, int(helper_decay_env))
-            except ValueError:
-                self._helper_decay_steps = 0
-        if self._helper_count > 0 and self._helper_decay_steps == 0:
-            self._helper_decay_steps = max(1, int(self._max_steps * 0.6))
-        if self._helper_count > 0:
-            self._helper_cells, self._helper_weights = self._build_helpers()
-
     def _sanitize_point(self, value: Optional[list], fallback: str) -> tuple[int, int]:
         if value and len(value) == 2:
             r, c = int(value[0]), int(value[1])
@@ -216,47 +179,6 @@ class MazeEnv(gym.Env):
             return base_goal
         return tuple(candidates[0])
 
-    def _build_helpers(self) -> tuple[List[tuple[int, int]], List[float]]:
-        dist_start = self._compute_distances(self._start)
-        goal_dist = float(dist_start[self._goal])
-        if not np.isfinite(goal_dist) or goal_dist < 2:
-            return [], []
-        on_path = np.isfinite(dist_start) & np.isfinite(self._dist_map)
-        on_path &= (dist_start + self._dist_map) == goal_dist
-        targets = []
-        for idx in range(1, self._helper_count + 1):
-            frac = idx / float(self._helper_count + 1)
-            target = int(round(goal_dist * frac))
-            target = max(1, min(int(goal_dist) - 1, target))
-            if target not in targets:
-                targets.append(target)
-        helper_cells: List[tuple[int, int]] = []
-        helper_weights: List[float] = []
-        for target in targets:
-            candidates = np.argwhere(on_path & (dist_start == target))
-            if candidates.size == 0:
-                path_cells = np.argwhere(on_path)
-                if path_cells.size == 0:
-                    continue
-                dist_vals = dist_start[path_cells[:, 0], path_cells[:, 1]]
-                idx = int(np.argmin(np.abs(dist_vals - target)))
-                pick = tuple(path_cells[idx])
-            else:
-                pick = tuple(candidates[0])
-            if pick in helper_cells or pick == self._start or pick == self._goal:
-                continue
-            helper_cells.append(pick)
-            progress = float(target) / goal_dist
-            weight = progress ** max(0.1, self._helper_power)
-            helper_weights.append(weight)
-        return helper_cells, helper_weights
-
-    def _helper_decay_factor(self) -> float:
-        if self._helper_decay_steps <= 0:
-            return 1.0
-        remaining = max(0.0, self._helper_decay_steps - self._step_count)
-        return remaining / float(self._helper_decay_steps)
-
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
@@ -274,7 +196,6 @@ class MazeEnv(gym.Env):
         self._novel_steps = 0
         self._last_pos = self._agent
         self._prev_action = None
-        self._helper_hits = set()
         return self._obs(), {}
 
     def step(self, action):
@@ -304,15 +225,6 @@ class MazeEnv(gym.Env):
                 reward += self._novelty_bonus
                 self._visited.add(self._agent)
                 self._novel_steps += 1
-            if self._helper_cells:
-                try:
-                    idx = self._helper_cells.index(self._agent)
-                except ValueError:
-                    idx = -1
-                if idx >= 0 and idx not in self._helper_hits:
-                    decay = self._helper_decay_factor()
-                    reward += self._helper_base_bonus * self._helper_weights[idx] * decay
-                    self._helper_hits.add(idx)
             else:
                 reward += -0.01
             reverse_map = {0: 1, 1: 0, 2: 3, 3: 2}
