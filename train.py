@@ -1545,25 +1545,25 @@ def main():
             rank_avg_steps = _rank_by("avg_steps", reverse=False)
 
             with metrics_csv_path.open("a", newline="", encoding="utf-8") as csvfile:
-                    writer = csv.DictWriter(
-                        csvfile,
-                        fieldnames=[
-                            "cycle",
-                            "model_id",
-                            "model_index",
-                            *metric_fields,
-                            "rank_avg_reward",
-                            "rank_best_dist",
-                            "rank_goal_rate",
-                            "rank_best_progress",
-                            "rank_avg_steps",
-                            "delta_reward",
-                            "delta_avg_steps",
-                            "train_goal",
-                            "train_goal_fraction",
-                            "train_timesteps",
-                            "iterations_per_set",
-                            "eval_episodes",
+                writer = csv.DictWriter(
+                    csvfile,
+                    fieldnames=[
+                        "cycle",
+                        "model_id",
+                        "model_index",
+                        *metric_fields,
+                        "rank_avg_reward",
+                        "rank_best_dist",
+                        "rank_goal_rate",
+                        "rank_best_progress",
+                        "rank_avg_steps",
+                        "delta_reward",
+                        "delta_avg_steps",
+                        "train_goal",
+                        "train_goal_fraction",
+                        "train_timesteps",
+                        "iterations_per_set",
+                        "eval_episodes",
                         "n_envs",
                         "n_steps",
                         "batch_size",
@@ -1581,26 +1581,26 @@ def main():
                 )
                 if not metrics_csv_exists:
                     writer.writeheader()
-                    for model_id, metrics, _ in metrics_list:
-                        delta_reward = None
-                        if cfg.metrics_deltas and model_id in last_avg_by_model:
-                            delta_reward = metrics.get("avg_reward", 0.0) - last_avg_by_model[model_id]
-                        last_avg_by_model[model_id] = metrics.get("avg_reward", 0.0)
-                        delta_avg_steps = None
-                        if cfg.metrics_deltas and model_id in last_avg_steps_by_model:
-                            delta_avg_steps = metrics.get("avg_steps", 0.0) - last_avg_steps_by_model[model_id]
-                        last_avg_steps_by_model[model_id] = metrics.get("avg_steps", 0.0)
-                        row = {"cycle": cycle, "model_id": model_id}
-                        row["model_index"] = _model_index(model_id)
-                        for field in metric_fields:
-                            row[field] = metrics.get(field, "")
-                        row["rank_avg_reward"] = rank_avg_reward.get(model_id, "")
-                        row["rank_best_dist"] = rank_best_dist.get(model_id, "")
-                        row["rank_goal_rate"] = rank_goal_rate.get(model_id, "")
-                        row["rank_best_progress"] = rank_best_progress.get(model_id, "")
-                        row["rank_avg_steps"] = rank_avg_steps.get(model_id, "")
-                        row["delta_reward"] = delta_reward if delta_reward is not None else ""
-                        row["delta_avg_steps"] = delta_avg_steps if delta_avg_steps is not None else ""
+                for model_id, metrics, _ in metrics_list:
+                    delta_reward = None
+                    if cfg.metrics_deltas and model_id in last_avg_by_model:
+                        delta_reward = metrics.get("avg_reward", 0.0) - last_avg_by_model[model_id]
+                    last_avg_by_model[model_id] = metrics.get("avg_reward", 0.0)
+                    delta_avg_steps = None
+                    if cfg.metrics_deltas and model_id in last_avg_steps_by_model:
+                        delta_avg_steps = metrics.get("avg_steps", 0.0) - last_avg_steps_by_model[model_id]
+                    last_avg_steps_by_model[model_id] = metrics.get("avg_steps", 0.0)
+                    row = {"cycle": cycle, "model_id": model_id}
+                    row["model_index"] = _model_index(model_id)
+                    for field in metric_fields:
+                        row[field] = metrics.get(field, "")
+                    row["rank_avg_reward"] = rank_avg_reward.get(model_id, "")
+                    row["rank_best_dist"] = rank_best_dist.get(model_id, "")
+                    row["rank_goal_rate"] = rank_goal_rate.get(model_id, "")
+                    row["rank_best_progress"] = rank_best_progress.get(model_id, "")
+                    row["rank_avg_steps"] = rank_avg_steps.get(model_id, "")
+                    row["delta_reward"] = delta_reward if delta_reward is not None else ""
+                    row["delta_avg_steps"] = delta_avg_steps if delta_avg_steps is not None else ""
                     row["train_goal"] = train_goal
                     row["train_goal_fraction"] = train_goal_fraction
                     row["train_timesteps"] = cfg.train_timesteps
