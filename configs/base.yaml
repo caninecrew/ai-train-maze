@@ -10,6 +10,7 @@ defaults:
     MAZE_NOVELTY_BONUS: 0.002
     MAZE_BACKTRACK_PENALTY: -0.3
     MAZE_FAIL_PENALTY: 100.0
+    MAZE_WALL_HUG_PENALTY: 1.0
 train_timesteps: 750000
 n_steps: 512
 batch_size: 512
