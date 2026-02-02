@@ -11,6 +11,8 @@ defaults:
     MAZE_FAIL_PENALTY: 100.0
     MAZE_WALL_HUG_PENALTY: 1.5
     MAZE_SHAPING_COEF: 0.2
+    MAZE_SHAPING_CAP: 0.5
+    MAZE_PROGRESS_BONUS: 0.05
     MAZE_TURN_PENALTY: 0.01
     MAZE_SLOW_PENALTY: 8.0
     MAZE_WRONG_WAY_PENALTY: 0.5
@@ -26,6 +28,9 @@ video_steps: 600
 eval_video_steps: 600
 long_eval_video_steps: 1200
 max_video_seconds: 30
+ent_coef: 0.02
+best_model_metric: avg_steps
+best_model_metric_cycles: 50
 profiles:
   quick:
     train_timesteps: 10000

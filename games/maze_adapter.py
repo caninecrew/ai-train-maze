@@ -63,6 +63,7 @@ class MazeEnv(gym.Env):
         self._best_dist_bonus = 0.1
         self._best_dist_hit_bonus = 0.2
         self._best_progress_bonus = 0.08
+        self._progress_bonus = 0.0
         self._speed_bonus = 0.0
         self._slow_penalty = 0.0
         self._speed_power = 1.0
@@ -70,6 +71,7 @@ class MazeEnv(gym.Env):
         self._wall_hug_penalty = 0.0
         self._turn_penalty = 0.0
         self._wrong_way_penalty = 0.0
+        self._shaping_cap = 0.0
         start = self._meta.get("start")
         goal = self._meta.get("goal")
         self._start = self._sanitize_point(start, fallback="start")
@@ -177,6 +179,18 @@ class MazeEnv(gym.Env):
                 self._wrong_way_penalty = float(wrong_way_env)
             except ValueError:
                 self._wrong_way_penalty = 0.0
+        progress_bonus_env = os.getenv("MAZE_PROGRESS_BONUS", "").strip()
+        if progress_bonus_env:
+            try:
+                self._progress_bonus = float(progress_bonus_env)
+            except ValueError:
+                self._progress_bonus = 0.0
+        shaping_cap_env = os.getenv("MAZE_SHAPING_CAP", "").strip()
+        if shaping_cap_env:
+            try:
+                self._shaping_cap = max(0.0, float(shaping_cap_env))
+            except ValueError:
+                self._shaping_cap = 0.0
 
     def _sanitize_point(self, value: Optional[list], fallback: str) -> Tuple[int, int]:
         if value and len(value) == 2:
@@ -249,55 +263,65 @@ class MazeEnv(gym.Env):
         nr, nc = r + dr, c + dc
 
         reward = self._step_penalty
+        step_extra = 0.0
         terminated = False
         if 0 <= nr < self._rows and 0 <= nc < self._cols and self._grid[nr, nc] == 0:
             self._agent = (nr, nc)
             self._consec_wall_hits = 0
             new_dist = self._dist_at(self._agent)
             if np.isfinite(self._prev_dist) and np.isfinite(new_dist):
-                reward += self._shaping_coef * (self._prev_dist - new_dist)
-                if new_dist < self._prev_dist:
-                    reward += self._cookie_bonus
-                elif new_dist > self._prev_dist and self._wrong_way_penalty > 0.0:
-                    reward -= self._wrong_way_penalty * (new_dist - self._prev_dist)
+                delta = self._prev_dist - new_dist
+                step_extra += self._shaping_coef * delta
+                if delta > 0.0:
+                    step_extra += self._cookie_bonus
+                    if self._progress_bonus > 0.0:
+                        step_extra += self._progress_bonus * delta
+                elif delta < 0.0 and self._wrong_way_penalty > 0.0:
+                    step_extra -= self._wrong_way_penalty * (-delta)
             if self._wall_hug_penalty > 0.0 and (self._prev_action is None or action == self._prev_action):
                 walls = 0
                 for rr, cc in ((nr - 1, nc), (nr + 1, nc), (nr, nc - 1), (nr, nc + 1)):
                     if rr < 0 or rr >= self._rows or cc < 0 or cc >= self._cols or self._grid[rr, cc] != 0:
                         walls += 1
                 if walls:
-                    reward -= self._wall_hug_penalty * (walls / 4.0)
+                    step_extra -= self._wall_hug_penalty * (walls / 4.0)
             if np.isfinite(new_dist) and new_dist < self._best_dist:
-                reward += self._best_dist_bonus * (self._best_dist - new_dist)
+                step_extra += self._best_dist_bonus * (self._best_dist - new_dist)
                 self._best_dist = new_dist
                 self._best_dist_hits += 1
-                reward += self._best_dist_hit_bonus * self._best_dist_hits
+                step_extra += self._best_dist_hit_bonus * self._best_dist_hits
             self._prev_dist = new_dist
             if self._agent not in self._visited:
-                reward += self._novelty_bonus
+                step_extra += self._novelty_bonus
                 self._visited.add(self._agent)
                 self._novel_steps += 1
             else:
-                reward += -0.01
+                step_extra += -0.01
             reverse_map = {0: 1, 1: 0, 2: 3, 3: 2}
             if self._prev_action is not None and action == reverse_map.get(self._prev_action):
-                reward += self._backtrack_penalty
+                step_extra += self._backtrack_penalty
                 self._backtracks += 1
             if self._turn_penalty > 0.0 and self._prev_action is not None and action != self._prev_action:
-                reward -= self._turn_penalty
+                step_extra -= self._turn_penalty
         else:
-            reward += self._wall_penalty
+            step_extra += self._wall_penalty
             self._wall_hits += 1
             self._consec_wall_hits += 1
             if self._consec_wall_hits > 1:
-                reward += self._consec_wall_penalty * (self._consec_wall_hits - 1)
+                step_extra += self._consec_wall_penalty * (self._consec_wall_hits - 1)
             if self._terminate_on_wall:
                 terminated = True
             else:
                 terminated = False
         if self._agent == (r, c):
-            reward += self._idle_penalty
+            step_extra += self._idle_penalty
             self._idle_steps += 1
+        if self._shaping_cap > 0.0:
+            if step_extra > self._shaping_cap:
+                step_extra = self._shaping_cap
+            elif step_extra < -self._shaping_cap:
+                step_extra = -self._shaping_cap
+        reward += step_extra
         self._last_pos = (r, c)
         self._prev_action = action
 

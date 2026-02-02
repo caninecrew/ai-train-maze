@@ -329,6 +329,7 @@ class TrainConfig:
     n_epochs: int = 4
     gamma: float = 0.99
     learning_rate: float = 2.5e-4
+    ent_coef: float = 0.0
     device: str = "auto"
     target_fps: int = 30
     max_video_seconds: int = 30  # total seconds per cycle video
@@ -365,6 +366,8 @@ class TrainConfig:
     eval_overlay: bool = True
     eval_deterministic: bool = False
     worker_watchdog: bool = True
+    best_model_metric: str = "best_dist"
+    best_model_metric_cycles: int = 0
     list_games: bool = False
     export_config: Optional[str] = None
     evo_first: bool = False
@@ -597,6 +600,7 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--n-epochs", type=int, default=defaults_from_file.get("n_epochs", TrainConfig.n_epochs))
     parser.add_argument("--gamma", type=float, default=defaults_from_file.get("gamma", TrainConfig.gamma))
     parser.add_argument("--learning-rate", type=float, default=defaults_from_file.get("learning_rate", TrainConfig.learning_rate))
+    parser.add_argument("--ent-coef", type=float, default=defaults_from_file.get("ent_coef", TrainConfig.ent_coef))
     parser.add_argument("--device", type=str, default=defaults_from_file.get("device", TrainConfig.device))
     parser.add_argument("--target-fps", type=int, default=defaults_from_file.get("target_fps", TrainConfig.target_fps))
     parser.add_argument("--max-video-seconds", type=int, default=defaults_from_file.get("max_video_seconds", TrainConfig.max_video_seconds))
@@ -637,6 +641,8 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--resume-from", type=str, default=defaults_from_file.get("resume_from", TrainConfig.resume_from), help="Checkpoint to resume from instead of *_latest.")
     parser.add_argument("--video-resolution", type=str, default=defaults_from_file.get("video_resolution", TrainConfig.video_resolution))
     parser.add_argument("--eval-deterministic", action="store_true", default=defaults_from_file.get("eval_deterministic", TrainConfig.eval_deterministic), help="Deterministic eval to reduce variance.")
+    parser.add_argument("--best-model-metric", type=str, default=defaults_from_file.get("best_model_metric", TrainConfig.best_model_metric))
+    parser.add_argument("--best-model-metric-cycles", type=int, default=defaults_from_file.get("best_model_metric_cycles", TrainConfig.best_model_metric_cycles))
     parser.add_argument("--watchdog", dest="worker_watchdog", action="store_true", default=defaults_from_file.get("worker_watchdog", TrainConfig.worker_watchdog), help="Keep training when a worker fails.")
     parser.add_argument("--dry-run", action="store_true", help="Parse config, build envs, and exit without training.")
     args = parser.parse_args(remaining)
@@ -649,6 +655,7 @@ def parse_args() -> TrainConfig:
         n_epochs=args.n_epochs,
         gamma=args.gamma,
         learning_rate=args.learning_rate,
+        ent_coef=args.ent_coef,
         device=args.device,
         target_fps=args.target_fps,
         max_video_seconds=args.max_video_seconds,
@@ -694,6 +701,8 @@ def parse_args() -> TrainConfig:
         video_resolution=args.video_resolution,
         eval_deterministic=args.eval_deterministic,
         worker_watchdog=args.worker_watchdog,
+        best_model_metric=args.best_model_metric,
+        best_model_metric_cycles=args.best_model_metric_cycles,
         list_games=args.list_games,
         export_config=args.export_config,
     )
@@ -1072,6 +1081,7 @@ def _train_single(
             n_epochs=cfg.n_epochs,
             gamma=cfg.gamma,
             learning_rate=cfg.learning_rate,
+            ent_coef=cfg.ent_coef,
             device=cfg.device,
         )
 
@@ -1271,6 +1281,22 @@ def main():
                 train_goal = os.getenv("MAZE_TRAIN_GOAL", "").strip()
                 train_goal_fraction = os.getenv("MAZE_TRAIN_GOAL_FRACTION", "").strip()
 
+        metric_override = cfg.best_model_metric
+        if cfg.best_model_metric_cycles and cycle > cfg.best_model_metric_cycles:
+            metric_override = "best_dist"
+
+        def _score_for(metrics: Dict[str, float]) -> float:
+            metric = (metric_override or "best_dist").lower()
+            if metric == "avg_steps":
+                value = metrics.get("avg_steps")
+            elif metric == "avg_reward":
+                value = metrics.get("avg_reward")
+            else:
+                value = metrics.get("best_dist")
+            if value is None:
+                return float("-inf")
+            return -float(value) if metric != "avg_reward" else float(value)
+
         futures: List[concurrent.futures.Future] = []
         seed_by_future: Dict[concurrent.futures.Future, int] = {}
         seed_by_model: Dict[str, int] = {}
@@ -1329,12 +1355,7 @@ def main():
                             print(traceback.format_exc())
                             continue
                         raise
-                    best_dist = metrics.get("best_dist")
-                    goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
-                    if best_dist is None:
-                        score = float("-inf")
-                    else:
-                        score = -float(best_dist)
+                    score = _score_for(metrics)
                     scores.append((model_id, score))
                     metrics_list.append((model_id, metrics, latest_path))
                     if stamped_path:
@@ -1376,12 +1397,7 @@ def main():
                                         print(traceback.format_exc())
                                     continue
                                 raise
-                            best_dist = metrics.get("best_dist")
-                            goal_rate = float(metrics.get("goal_reached_rate") or 0.0)
-                            if best_dist is None:
-                                score = float("-inf")
-                            else:
-                                score = -float(best_dist)
+                            score = _score_for(metrics)
                             scores.append((model_id, score))
                             metrics_list.append((model_id, metrics, latest_path))
                             if stamped_path:
@@ -1632,8 +1648,9 @@ def main():
                 annotated = _add_overlay(all_grid_frames[-1], f"Next base model: {best_id}")
                 all_grid_frames.append(annotated)
             elapsed = time.time() - start_cycle
+            metric_label = (metric_override or "best_dist").lower()
             print(
-                f"Best model this cycle: {best_id} (avg reward {best_score_cycle:.3f}); "
+                f"Best model this cycle: {best_id} ({metric_label} score {best_score_cycle:.3f}); "
                 f"elapsed {elapsed:.1f}s; no_improve={no_improve_cycles}"
             )
             print(
